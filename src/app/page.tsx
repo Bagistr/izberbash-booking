@@ -4,9 +4,12 @@ import { Property } from '@/types/property';
 import { PropertyList } from '@/components/PropertyList';
 import { Waves, ShieldCheck, MapPin, Sparkles } from 'lucide-react';
 
+// Принудительно отключаем кэш, чтобы новые объявления из базы подгружались сразу
+export const dynamic = 'force-dynamic';
+
 async function getProperties(): Promise<Property[]> {
   try {
-    const rows = await sql`SELECT * FROM properties WHERE is_active = true`;
+    const rows = await sql`SELECT * FROM properties WHERE is_active = true ORDER BY created_at DESC`;
     return rows as Property[];
   } catch (err) {
     console.error('Ошибка получения данных из Neon:', err);
@@ -19,7 +22,7 @@ export default async function HomePage() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
-      {/* Шапка / Навбар */}
+      {/* Шапка */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-2">
@@ -27,7 +30,7 @@ export default async function HomePage() {
               <Waves className="w-6 h-6" />
             </div>
             <span className="font-extrabold text-xl tracking-tight text-slate-900">
-              Dag<span className="text-blue-600">Booking</span>
+              Избербаш<span className="text-blue-600">Море</span>
             </span>
           </div>
 
@@ -40,7 +43,7 @@ export default async function HomePage() {
         </div>
       </header>
 
-      {/* Промо-блок (Hero Section) */}
+      {/* Промо-блок */}
       <section className="relative bg-gradient-to-b from-blue-900 via-blue-800 to-slate-900 text-white py-16 px-4">
         <div className="max-w-4xl mx-auto text-center space-y-4">
           <div className="inline-flex items-center space-x-2 bg-blue-500/20 backdrop-blur-md border border-blue-400/30 px-3 py-1.5 rounded-full text-blue-200 text-sm font-medium">

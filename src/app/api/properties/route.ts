@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { sql } from '@/lib/db';
 
 export async function POST(request: Request) {
@@ -17,7 +18,6 @@ export async function POST(request: Request) {
       landlord_phone,
     } = body;
 
-    // Валидация обязательных полей
     if (!title || !price_per_night || !distance_to_sea || !address || !landlord_phone) {
       return NextResponse.json(
         { error: 'Заполните все обязательные поля' },
@@ -25,20 +25,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // Генерация простейшего slug из названия
     const slug = `${title.toLowerCase().replace(/[^a-z0-9а-яё]/g, '-')}-${Date.now()}`;
 
-    // Преобразование строки удобств в массив
     const amenitiesArray = typeof amenities === 'string' 
       ? amenities.split(',').map((a: string) => a.trim()).filter(Boolean)
       : amenities || [];
 
-    // Преобразование ссылок на фото в массив
     const photosArray = typeof photos === 'string'
       ? photos.split('\n').map((p: string) => p.trim()).filter(Boolean)
       : photos || [];
 
-    // По дефолту ставим аватарку, если фото не загружены
     const finalPhotos = photosArray.length > 0 
       ? photosArray 
       : ['https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=1000&q=80'];
@@ -56,6 +52,9 @@ export async function POST(request: Request) {
         ${landlord_phone}, true
       )
     `;
+
+    // Принудительно очищаем кэш главной страницы
+    revalidatePath('/');
 
     return NextResponse.json({ success: true });
   } catch (error) {
