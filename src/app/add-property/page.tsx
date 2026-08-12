@@ -2,7 +2,13 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { Waves, ArrowLeft, Building2, Upload, X, CheckCircle2, ImagePlus } from 'lucide-react';
+import { Waves, ArrowLeft, Building2, X, CheckCircle2, ImagePlus, Plus } from 'lucide-react';
+
+const PRESET_AMENITIES = [
+  'Wi-Fi', 'Кондиционер', 'Мангал', 'Бассейн', 'Беседка', 
+  'Лежак / Шезлонг', 'Парковка', 'Баня / Сауна', 'Вид на море', 
+  'Стиральная машина', 'Телевизор', 'Детская площадка'
+];
 
 export default function AddPropertyPage() {
   const [formData, setFormData] = useState({
@@ -13,10 +19,13 @@ export default function AddPropertyPage() {
     distance_to_sea: '',
     address: '',
     description: '',
-    amenities: 'Wi-Fi, Кондиционер, Мангал, Парковка',
     landlord_phone: '',
   });
 
+  const [selectedAmenities, setSelectedAmenities] = useState<string[]>([
+    'Wi-Fi', 'Кондиционер', 'Мангал'
+  ]);
+  const [customAmenity, setCustomAmenity] = useState('');
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -27,7 +36,19 @@ export default function AddPropertyPage() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // Загрузка фото в Cloudinary
+  const toggleAmenity = (amenity: string) => {
+    setSelectedAmenities((prev) =>
+      prev.includes(amenity) ? prev.filter((a) => a !== amenity) : [...prev, amenity]
+    );
+  };
+
+  const addCustomAmenity = () => {
+    if (customAmenity.trim() && !selectedAmenities.includes(customAmenity.trim())) {
+      setSelectedAmenities((prev) => [...prev, customAmenity.trim()]);
+      setCustomAmenity('');
+    }
+  };
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -57,7 +78,7 @@ export default function AddPropertyPage() {
           body: data,
         });
 
-        if (!res.ok) throw new Error('Ошибка загрузки одного из файлов');
+        if (!res.ok) throw new Error('Ошибка загрузки');
 
         const fileData = await res.json();
         newUploadedPhotos.push(fileData.secure_url);
@@ -65,14 +86,12 @@ export default function AddPropertyPage() {
 
       setPhotos((prev) => [...prev, ...newUploadedPhotos]);
     } catch (err) {
-      console.error('Ошибка при загрузке фото:', err);
-      setErrorMsg('Не удалось загрузить фотографии. Попробуйте другой файл или меньший размер.');
+      setErrorMsg('Не удалось загрузить фотографии.');
     } finally {
       setUploading(false);
     }
   };
 
-  // Удаление фото из списка
   const handleRemovePhoto = (indexToRemove: number) => {
     setPhotos((prev) => prev.filter((_, index) => index !== indexToRemove));
   };
@@ -83,7 +102,7 @@ export default function AddPropertyPage() {
     setErrorMsg('');
 
     if (photos.length === 0) {
-      setErrorMsg('Пожалуйста, загрузите хотя бы одну фотографию объекта.');
+      setErrorMsg('Пожалуйста, загрузите хотя бы одну фотографию.');
       setLoading(false);
       return;
     }
@@ -94,6 +113,7 @@ export default function AddPropertyPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
+          amenities: selectedAmenities,
           photos,
         }),
       });
@@ -102,7 +122,7 @@ export default function AddPropertyPage() {
 
       setIsSuccess(true);
     } catch (err) {
-      setErrorMsg('Не удалось отправить объект. Проверьте заполнение полей.');
+      setErrorMsg('Не удалось отправить объект. Проверьте заполнение.');
     } finally {
       setLoading(false);
     }
@@ -117,7 +137,7 @@ export default function AddPropertyPage() {
               <Waves className="w-6 h-6" />
             </div>
             <span className="font-extrabold text-xl tracking-tight text-slate-900">
-              Dag<span className="text-blue-600">Booking</span>
+              Избербаш<span className="text-blue-600">Море</span>
             </span>
           </Link>
 
@@ -133,14 +153,10 @@ export default function AddPropertyPage() {
             <div className="text-center py-8 space-y-4">
               <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto" />
               <h2 className="text-2xl font-black text-slate-900">Объект успешно добавлен!</h2>
-              <p className="text-slate-600 text-sm">
-                Ваш дом/номер опубликован на сайте и доступен для бронирования.
-              </p>
-              <div className="pt-4 flex flex-col sm:flex-row gap-3">
-                <Link href="/" className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl text-center hover:bg-blue-700 transition-colors">
-                  Посмотреть в каталоге
-                </Link>
-              </div>
+              <p className="text-slate-600 text-sm">Ваш объект опубликован в каталоге.</p>
+              <Link href="/" className="inline-block bg-blue-600 text-white font-bold py-3 px-8 rounded-xl hover:bg-blue-700 transition-colors">
+                Посмотреть в каталоге
+              </Link>
             </div>
           ) : (
             <div>
@@ -150,15 +166,10 @@ export default function AddPropertyPage() {
                   <span>Партнерам и владельцам</span>
                 </div>
                 <h1 className="text-3xl font-black text-slate-900">Сдать жилье в Избербаше</h1>
-                <p className="text-slate-500 text-sm mt-1">
-                  Заполните базовые данные и выберите фотографии со своего устройства.
-                </p>
               </div>
 
               {errorMsg && (
-                <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-2xl text-xs font-medium">
-                  {errorMsg}
-                </div>
+                <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-2xl text-xs font-medium">{errorMsg}</div>
               )}
 
               <form onSubmit={handleSubmit} className="space-y-6">
@@ -168,10 +179,10 @@ export default function AddPropertyPage() {
                     type="text"
                     name="title"
                     required
-                    placeholder="Пример: Уютный коттедж у Каспийского моря"
+                    placeholder="Пример: Коттедж у моря с бассеном и мангалом"
                     value={formData.title}
                     onChange={handleChange}
-                    className="w-full text-sm font-medium bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
@@ -182,10 +193,10 @@ export default function AddPropertyPage() {
                       name="property_type"
                       value={formData.property_type}
                       onChange={handleChange}
-                      className="w-full text-sm font-medium bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="house">Дом / Коттедж</option>
-                      <option value="room">Номер в отеле/гостевом доме</option>
+                      <option value="room">Номер в отеле / Гостевой дом</option>
                     </select>
                   </div>
 
@@ -198,14 +209,14 @@ export default function AddPropertyPage() {
                       placeholder="5000"
                       value={formData.price_per_night}
                       onChange={handleChange}
-                      className="w-full text-sm font-medium bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Расстояние до моря (в метрах) *</label>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Расстояние до моря (метров) *</label>
                     <input
                       type="number"
                       name="distance_to_sea"
@@ -213,12 +224,12 @@ export default function AddPropertyPage() {
                       placeholder="150"
                       value={formData.distance_to_sea}
                       onChange={handleChange}
-                      className="w-full text-sm font-medium bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Макс. спальных мест</label>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Макс. гостей</label>
                     <input
                       type="number"
                       name="max_guests"
@@ -226,7 +237,7 @@ export default function AddPropertyPage() {
                       placeholder="6"
                       value={formData.max_guests}
                       onChange={handleChange}
-                      className="w-full text-sm font-medium bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                 </div>
@@ -237,10 +248,10 @@ export default function AddPropertyPage() {
                     type="text"
                     name="address"
                     required
-                    placeholder="г. Избербаш, ул. Приморская, д. 15"
+                    placeholder="г. Избербаш, ул. Приморская, 15"
                     value={formData.address}
                     onChange={handleChange}
-                    className="w-full text-sm font-medium bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
@@ -253,60 +264,88 @@ export default function AddPropertyPage() {
                     placeholder="+7 988 000 00 00"
                     value={formData.landlord_phone}
                     onChange={handleChange}
-                    className="w-full text-sm font-medium bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
-                {/* БЛОК ЗАГРУЗКИ ФОТОГРАФИЙ */}
+                {/* ВЫБОР БОНУСОВ И УДОБСТВ */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-2">
-                    Фотографии объекта *
+                    Бонусы и удобства дома
                   </label>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {PRESET_AMENITIES.map((amenity) => {
+                      const isSelected = selectedAmenities.includes(amenity);
+                      return (
+                        <button
+                          key={amenity}
+                          type="button"
+                          onClick={() => toggleAmenity(amenity)}
+                          className={`text-xs font-semibold px-3 py-2 rounded-xl transition-all border ${
+                            isSelected
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                              : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          {isSelected ? '✓ ' : '+ '}{amenity}
+                        </button>
+                      );
+                    })}
+                  </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                  {/* Свои бонусы */}
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Добавить свой бонус (напр. Джакузи)"
+                      value={customAmenity}
+                      onChange={(e) => setCustomAmenity(e.target.value)}
+                      className="flex-1 text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"
+                    />
+                    <button
+                      type="button"
+                      onClick={addCustomAmenity}
+                      className="bg-slate-800 text-white text-xs font-bold px-3 py-2 rounded-xl"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* ФОТОГРАФИИ */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Фотографии *</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-2">
                     {photos.map((url, index) => (
-                      <div key={index} className="relative h-24 rounded-2xl overflow-hidden border border-slate-200 group">
+                      <div key={index} className="relative h-24 rounded-2xl overflow-hidden border border-slate-200">
                         <img src={url} alt="Загруженное фото" className="w-full h-full object-cover" />
                         <button
                           type="button"
                           onClick={() => handleRemovePhoto(index)}
-                          className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-full opacity-80 hover:opacity-100 transition-opacity"
+                          className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-full"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     ))}
 
-                    <label className="h-24 border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-2xl flex flex-col items-center justify-center cursor-pointer bg-slate-50 hover:bg-blue-50/50 transition-colors">
+                    <label className="h-24 border-2 border-dashed border-slate-300 rounded-2xl flex flex-col items-center justify-center cursor-pointer bg-slate-50 hover:bg-blue-50/50">
                       <ImagePlus className="w-6 h-6 text-slate-400 mb-1" />
-                      <span className="text-xs font-semibold text-slate-600">Добавить</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        onChange={handleImageUpload}
-                        disabled={uploading}
-                        className="hidden"
-                      />
+                      <span className="text-xs font-semibold text-slate-600">Загрузить</span>
+                      <input type="file" accept="image/*" multiple onChange={handleImageUpload} disabled={uploading} className="hidden" />
                     </label>
                   </div>
-
-                  {uploading && (
-                    <p className="text-xs text-blue-600 font-medium animate-pulse">
-                      Идет загрузка фотографий...
-                    </p>
-                  )}
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Описание жилья</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Описание</label>
                   <textarea
                     name="description"
                     rows={3}
                     placeholder="Панорамные окна, беседка, закрытый двор..."
                     value={formData.description}
                     onChange={handleChange}
-                    className="w-full text-sm font-medium bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
@@ -315,7 +354,7 @@ export default function AddPropertyPage() {
                   disabled={loading || uploading}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm py-4 rounded-2xl transition-colors shadow-lg shadow-blue-500/25"
                 >
-                  {loading ? 'Публикация объекта...' : 'Опубликовать объект'}
+                  {loading ? 'Публикация...' : 'Опубликовать объект'}
                 </button>
               </form>
             </div>
