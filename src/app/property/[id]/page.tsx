@@ -122,13 +122,20 @@ export default async function PropertyDetailPage({
                 </div>
               </div>
 
-              <a
-                href={`tel:${property.landlord_phone}`}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-4 rounded-2xl flex items-center justify-center space-x-2 transition-colors shadow-lg shadow-blue-500/25"
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-center space-y-2">
+                <ShieldCheck className="w-8 h-8 text-blue-600 mx-auto" />
+                <p className="text-xs font-bold text-slate-800">Заселение через сервис</p>
+                <p className="text-[11px] text-slate-500 leading-normal">
+                  Контакты собственника и точный адрес будут доступны сразу после подтверждения бронирования.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setIsBookingOpen(true)}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-4 rounded-2xl transition-colors shadow-lg shadow-blue-500/25 flex items-center justify-center space-x-2"
               >
-                <Phone className="w-5 h-5" />
-                <span>Позвонить собственнику</span>
-              </a>
+                <span>Забронировать онлайн</span>
+              </button>
             </div>
           </div>
         </div>

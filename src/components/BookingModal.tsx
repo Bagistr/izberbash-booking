@@ -1,12 +1,17 @@
 'use client';
 
-import React, { useState } from 'react';
-import { X, User, Phone, Send, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, User, Phone, Send, CheckCircle2, CalendarX } from 'lucide-react';
 import { Property } from '@/types/property';
 
 interface BookingModalProps {
   property: Property | null;
   onClose: () => void;
+}
+
+interface BookedRange {
+  check_in: string;
+  check_out: string;
 }
 
 export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose }) => {
@@ -17,11 +22,42 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
   const [checkOut, setCheckOut] = useState('');
   const [guestsCount, setGuestsCount] = useState(1);
 
+  const [bookedRanges, setBookedRanges] = useState<BookedRange[]>([]);
   const [loading, setLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
+  // Загружаем уже забронированные даты для объекта
+  useEffect(() => {
+    if (!property) return;
+    async function fetchBookedDates() {
+      try {
+        const res = await fetch(`/api/properties/${property?.id}/booked-dates`);
+        if (res.ok) {
+          const data = await res.json();
+          setBookedRanges(data.bookings || []);
+        }
+      } catch (err) {
+        console.error('Не удалось подгрузить занятые даты', err);
+      }
+    }
+    fetchBookedDates();
+  }, [property]);
+
   if (!property) return null;
+
+  // Проверка, попадает ли дата в занятый диапазон
+  const isDateRangeOverlapping = (startStr: string, endStr: string) => {
+    if (!startStr || !endStr) return false;
+    const start = new Date(startStr);
+    const end = new Date(endStr);
+
+    return bookedRanges.some((range) => {
+      const bStart = new Date(range.check_in);
+      const bEnd = new Date(range.check_out);
+      return start < bEnd && end > bStart;
+    });
+  };
 
   const calculateTotal = () => {
     if (!checkIn || !checkOut) return { days: 0, price: 0 };
@@ -41,7 +77,13 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
     setErrorMsg('');
 
     if (days <= 0) {
-      setErrorMsg('Дата выезда должна быть позже даты заезда');
+      setErrorMsg('Дата выезда должна быть позже даты заезда.');
+      return;
+    }
+
+    // Блокировка отправки, если даты уже забронированы
+    if (isDateRangeOverlapping(checkIn, checkOut)) {
+      setErrorMsg('К сожалению, эти даты уже забронированы другим гостем. Пожалуйста, выберите другие даты.');
       return;
     }
 
@@ -87,9 +129,9 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
         {isSuccess ? (
           <div className="text-center py-8 space-y-4">
             <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto animate-bounce" />
-            <h3 className="text-2xl font-black text-slate-800">Заявка принята!</h3>
+            <h3 className="text-2xl font-black text-slate-800">Заявка отправлена!</h3>
             <p className="text-slate-600 text-sm leading-relaxed">
-              Спасибо, <strong>{guestName}</strong>! Мы свяжемся с вами в ближайшее время для подтверждения бронирования объекта <strong>«{property.title}»</strong>.
+              Спасибо, <strong>{guestName}</strong>! Менеджер сервиса свяжется с вами для подтверждения бронирования.
             </p>
             <button
               onClick={onClose}
@@ -101,7 +143,24 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
         ) : (
           <div>
             <h3 className="text-xl font-bold text-slate-900 mb-1">Забронировать жилье</h3>
-            <p className="text-xs text-blue-600 font-medium mb-6 line-clamp-1">{property.title}</p>
+            <p className="text-xs text-blue-600 font-medium mb-4 line-clamp-1">{property.title}</p>
+
+            {/* Список уже занятых дат для информации гостя */}
+            {bookedRanges.length > 0 && (
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-2xl">
+                <div className="flex items-center text-amber-800 text-xs font-bold mb-1">
+                  <CalendarX className="w-4 h-4 mr-1 text-amber-600" />
+                  <span>Занятые даты для этого дома:</span>
+                </div>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {bookedRanges.map((r, i) => (
+                    <span key={i} className="text-[11px] bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md font-medium">
+                      с {r.check_in.slice(0, 10)} по {r.check_out.slice(0, 10)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {errorMsg && (
               <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-xl text-xs font-medium">
@@ -207,7 +266,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
                 disabled={loading}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm py-3.5 rounded-xl transition-colors shadow-lg shadow-blue-500/30"
               >
-                {loading ? 'Отправка...' : 'Подтвердить бронирование'}
+                {loading ? 'Проверка и отправка...' : 'Подтвердить бронирование'}
               </button>
             </form>
           </div>
