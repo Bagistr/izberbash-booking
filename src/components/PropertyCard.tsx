@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, TouchEvent } from 'react';
 import Link from 'next/link';
 import { MapPin, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Property } from '@/types/property';
@@ -16,23 +16,47 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onBook }) 
     : ['https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=1000&q=80'];
 
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
 
-  const prevPhoto = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const prevPhoto = (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
     setCurrentPhotoIndex((prev) => (prev === 0 ? photos.length - 1 : prev - 1));
   };
 
-  const nextPhoto = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const nextPhoto = (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
     setCurrentPhotoIndex((prev) => (prev === photos.length - 1 ? 0 : prev + 1));
+  };
+
+  // Логика свайпа пальцем
+  const handleTouchStart = (e: TouchEvent) => {
+    setTouchStartX(e.touches[0].clientX);
+  };
+
+  const handleTouchEnd = (e: TouchEvent) => {
+    if (touchStartX === null) return;
+    const touchEndX = e.changedTouches[0].clientX;
+    const diff = touchStartX - touchEndX;
+
+    // Порог свайпа — 40px
+    if (diff > 40) {
+      nextPhoto(); // Смах влево -> следующее фото
+    } else if (diff < -40) {
+      prevPhoto(); // Смах вправо -> предыдущее фото
+    }
+    setTouchStartX(null);
   };
 
   return (
     <div className="bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-200 flex flex-col h-full group">
-      {/* Слайдер картинок */}
-      <div className="relative h-64 w-full overflow-hidden bg-slate-100">
+      {/* Слайдер картинок со свайпом */}
+      <div 
+        className="relative h-64 w-full overflow-hidden bg-slate-100 select-none"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         <Link href={`/property/${property.id}`} className="block w-full h-full">
           <img
             src={photos[currentPhotoIndex]}
@@ -46,18 +70,18 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onBook }) 
           {property.distance_to_sea} м до моря
         </div>
 
-        {/* Стрелки переключения фото (если больше 1 фото) */}
+        {/* Кнопки-стрелки для ПК */}
         {photos.length > 1 && (
           <>
             <button
               onClick={prevPhoto}
-              className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white text-slate-800 p-1.5 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity z-10"
+              className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white text-slate-800 p-1.5 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity z-10 hidden sm:block"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button
               onClick={nextPhoto}
-              className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white text-slate-800 p-1.5 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity z-10"
+              className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white text-slate-800 p-1.5 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity z-10 hidden sm:block"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -91,7 +115,7 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onBook }) 
             </h3>
           </Link>
 
-          {/* Отображаем максимум 3 главных бонуса в каталоге */}
+          {/* Главные бонусы */}
           <div className="flex flex-wrap gap-1.5 mb-4">
             {property.amenities?.slice(0, 3).map((item, index) => (
               <span

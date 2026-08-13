@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { Property } from '@/types/property';
 import { PropertyCard } from '@/components/PropertyCard';
 import { BookingModal } from '@/components/BookingModal';
-import { SlidersHorizontal, Waves, Home, Building } from 'lucide-react';
+import { SlidersHorizontal, Home, Building } from 'lucide-react';
 
 const FILTER_BONUSES = ['Wi-Fi', 'Кондиционер', 'Мангал', 'Бассейн', 'Беседка', 'Парковка', 'Вид на море'];
 
@@ -13,6 +13,8 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
 
   // Состояние фильтров
   const [typeFilter, setTypeFilter] = useState<'all' | 'house' | 'room'>('all');
+  const [minPrice, setMinPrice] = useState<string>('');
+  const [maxPrice, setMaxPrice] = useState<string>('');
   const [maxDistance, setMaxDistance] = useState<number>(1000);
   const [selectedBonuses, setSelectedBonuses] = useState<string[]>([]);
 
@@ -22,15 +24,19 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
     );
   };
 
-  // Логика фильтрации
+  // Фильтрация
   const filteredProperties = properties.filter((item) => {
     // 1. Фильтр по типу
     if (typeFilter !== 'all' && item.property_type !== typeFilter) return false;
 
-    // 2. Фильтр по морю
+    // 2. Фильтр по цене от и до
+    if (minPrice && item.price_per_night < Number(minPrice)) return false;
+    if (maxPrice && item.price_per_night > Number(maxPrice)) return false;
+
+    // 3. Фильтр по морю
     if (item.distance_to_sea > maxDistance) return false;
 
-    // 3. Фильтр по бонусам
+    // 4. Фильтр по бонусам
     if (selectedBonuses.length > 0) {
       const hasAllBonuses = selectedBonuses.every((b) => item.amenities?.includes(b));
       if (!hasAllBonuses) return false;
@@ -53,14 +59,14 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
           </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Тип объекта */}
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Тип жилья</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-1.5">
               <button
                 onClick={() => setTypeFilter('all')}
-                className={`py-2 px-3 text-xs font-bold rounded-xl transition-all ${
+                className={`py-2 text-xs font-bold rounded-xl transition-all ${
                   typeFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
@@ -68,7 +74,7 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
               </button>
               <button
                 onClick={() => setTypeFilter('house')}
-                className={`py-2 px-3 text-xs font-bold rounded-xl flex items-center justify-center space-x-1 transition-all ${
+                className={`py-2 text-xs font-bold rounded-xl flex items-center justify-center transition-all ${
                   typeFilter === 'house' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
@@ -76,7 +82,7 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
               </button>
               <button
                 onClick={() => setTypeFilter('room')}
-                className={`py-2 px-3 text-xs font-bold rounded-xl flex items-center justify-center space-x-1 transition-all ${
+                className={`py-2 text-xs font-bold rounded-xl flex items-center justify-center transition-all ${
                   typeFilter === 'room' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
@@ -85,11 +91,32 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
             </div>
           </div>
 
+          {/* Фильтр по стоимости (От и До) */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Цена за сутки (₽)</label>
+            <div className="flex space-x-2">
+              <input
+                type="number"
+                placeholder="От"
+                value={minPrice}
+                onChange={(e) => setMinPrice(e.target.value)}
+                className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="number"
+                placeholder="До"
+                value={maxPrice}
+                onChange={(e) => setMaxPrice(e.target.value)}
+                className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
           {/* Удаленность от моря */}
           <div>
             <div className="flex justify-between items-center mb-2">
               <label className="block text-xs font-bold text-slate-700 uppercase">Макс. до моря</label>
-              <span className="text-xs font-extrabold text-blue-600">{maxDistance} метров</span>
+              <span className="text-xs font-extrabold text-blue-600">{maxDistance} м</span>
             </div>
             <input
               type="range"
@@ -103,8 +130,8 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
           </div>
 
           {/* Бонусы */}
-          <div className="md:col-span-2 lg:col-span-1">
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Удобства и бонусы</label>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Удобства</label>
             <div className="flex flex-wrap gap-1.5">
               {FILTER_BONUSES.map((bonus) => {
                 const isSelected = selectedBonuses.includes(bonus);
@@ -112,7 +139,7 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
                   <button
                     key={bonus}
                     onClick={() => toggleBonus(bonus)}
-                    className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-all ${
+                    className={`text-[11px] font-semibold px-2 py-1 rounded-lg border transition-all ${
                       isSelected
                         ? 'bg-blue-600 text-white border-blue-600'
                         : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
@@ -134,12 +161,14 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
           <button
             onClick={() => {
               setTypeFilter('all');
+              setMinPrice('');
+              setMaxPrice('');
               setMaxDistance(1000);
               setSelectedBonuses([]);
             }}
             className="mt-3 text-xs font-bold text-blue-600 hover:underline"
           >
-            Сбросить фильтры
+            Сбросить все фильтры
           </button>
         </div>
       ) : (
