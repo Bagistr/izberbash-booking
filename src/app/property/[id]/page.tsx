@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { sql } from '@/lib/db';
 import { Property } from '@/types/property';
-import { Waves, ArrowLeft, MapPin, Users, Check, Phone } from 'lucide-react';
+import { Waves, ArrowLeft, MapPin, Users, Check, Phone, ShieldCheck } from 'lucide-react';
 
 async function getProperty(id: string): Promise<Property | null> {
   try {
