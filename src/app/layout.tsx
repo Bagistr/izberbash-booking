@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
+import { AuthProvider } from '@/context/AuthContext';
 import { FavoritesProvider } from '@/context/FavoritesContext';
 
 const inter = Inter({ subsets: ['latin', 'cyrillic'] });
@@ -18,9 +19,11 @@ export default function RootLayout({
   return (
     <html lang="ru">
       <body className={inter.className}>
-        <FavoritesProvider>
-          {children}
-        </FavoritesProvider>
+        <AuthProvider>
+          <FavoritesProvider>
+            {children}
+          </FavoritesProvider>
+        </AuthProvider>
       </body>
     </html>
   );

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useAuth } from '@/context/AuthContext';
 
 interface FavoritesContextType {
   favorites: string[];
@@ -15,46 +16,33 @@ const FavoritesContext = createContext<FavoritesContextType>({
 });
 
 export const FavoritesProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user } = useAuth();
   const [favorites, setFavorites] = useState<string[]>([]);
 
-  // Загружаем избранное (из базы если вошел, или из памяти)
   useEffect(() => {
-    try {
-      const storedUser = localStorage.getItem('rp_user');
-      const localFavs = localStorage.getItem('rp_favorites');
-
-      if (storedUser) {
-        const user = JSON.parse(storedUser);
-        fetch(`/api/favorites?phone=${encodeURIComponent(user.phone)}`)
-          .then((res) => res.json())
-          .then((data) => {
-            if (data.favorites) {
-              setFavorites(data.favorites);
-              localStorage.setItem('rp_favorites', JSON.stringify(data.favorites));
-            }
-          })
-          .catch(() => {});
-      } else if (localFavs) {
-        setFavorites(JSON.parse(localFavs));
-      }
-    } catch (e) {
-      console.error(e);
+    if (user?.phone) {
+      fetch(`/api/favorites?phone=${encodeURIComponent(user.phone)}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.favorites) {
+            setFavorites(data.favorites);
+            localStorage.setItem('rp_favorites', JSON.stringify(data.favorites));
+          }
+        })
+        .catch(() => {});
+    } else {
+      const local = localStorage.getItem('rp_favorites');
+      if (local) setFavorites(JSON.parse(local));
     }
-  }, []);
+  }, [user]);
 
   const toggleFavorite = (propertyId: string) => {
     const isFav = favorites.includes(propertyId);
-    const nextFavorites = isFav
-      ? favorites.filter((id) => id !== propertyId)
-      : [...favorites, propertyId];
+    const next = isFav ? favorites.filter((id) => id !== propertyId) : [...favorites, propertyId];
+    setFavorites(next);
+    localStorage.setItem('rp_favorites', JSON.stringify(next));
 
-    setFavorites(nextFavorites);
-    localStorage.setItem('rp_favorites', JSON.stringify(nextFavorites));
-
-    // Если турист вошел в профиль, синхронизируем с базой
-    const storedUser = localStorage.getItem('rp_user');
-    if (storedUser) {
-      const user = JSON.parse(storedUser);
+    if (user?.phone) {
       fetch('/api/favorites', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
