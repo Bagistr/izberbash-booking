@@ -25,6 +25,7 @@ export default function AddPropertyPage() {
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([
     'Wi-Fi', 'Кондиционер', 'Мангал'
   ]);
+  const [customAmenitiesList, setCustomAmenitiesList] = useState<string[]>([]);
   const [customAmenity, setCustomAmenity] = useState('');
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -42,14 +43,19 @@ export default function AddPropertyPage() {
     );
   };
 
-  // Правильная функция добавления бонуса (находится внутри компонента)
+  // Добавление собственного бонуса
   const addCustomAmenity = (e?: React.MouseEvent | React.KeyboardEvent) => {
     if (e) e.preventDefault();
     const trimmed = customAmenity.trim();
-    if (trimmed && !selectedAmenities.includes(trimmed)) {
-      setSelectedAmenities((prev) => [...prev, trimmed]);
-      setCustomAmenity('');
+    if (!trimmed) return;
+
+    if (!PRESET_AMENITIES.includes(trimmed) && !customAmenitiesList.includes(trimmed)) {
+      setCustomAmenitiesList((prev) => [...prev, trimmed]);
     }
+    if (!selectedAmenities.includes(trimmed)) {
+      setSelectedAmenities((prev) => [...prev, trimmed]);
+    }
+    setCustomAmenity('');
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -130,6 +136,9 @@ export default function AddPropertyPage() {
       setLoading(false);
     }
   };
+
+  // Объединяем стандартные и пользовательские бонусы для отображения
+  const allAvailableAmenities = [...PRESET_AMENITIES, ...customAmenitiesList];
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 pb-16">
@@ -277,7 +286,7 @@ export default function AddPropertyPage() {
                     Бонусы и удобства дома
                   </label>
                   <div className="flex flex-wrap gap-2 mb-3">
-                    {PRESET_AMENITIES.map((amenity) => {
+                    {allAvailableAmenities.map((amenity) => {
                       const isSelected = selectedAmenities.includes(amenity);
                       return (
                         <button
@@ -296,8 +305,8 @@ export default function AddPropertyPage() {
                     })}
                   </div>
 
-                  {/* Свои бонусы */}
-                  <div className="flex gap-2 mt-2">
+                  {/* Добавление своего бонуса */}
+                  <div className="flex gap-2">
                     <input
                       type="text"
                       placeholder="Например: Сапборды / Джакузи"
@@ -306,7 +315,7 @@ export default function AddPropertyPage() {
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
-                          addCustomAmenity();
+                          addCustomAmenity(e);
                         }
                       }}
                       className="flex-1 text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
