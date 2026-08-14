@@ -6,13 +6,14 @@ import { useRouter } from 'next/navigation';
 import {
   Waves, DollarSign, TrendingUp, Users, Calendar as CalendarIcon,
   Plus, LogOut, Edit3, Eye, EyeOff, ChevronLeft, ChevronRight,
-  X, Check, MapPin, Building, Home, Phone, User
+  X, Check, MapPin, Building, Home, Phone, User, Lock, Unlock, Trash2
 } from 'lucide-react';
 import { Property } from '@/types/property';
 
 interface BookingItem {
   id: string;
   property_id: string;
+  unit_id?: string;
   property_title: string;
   guest_name: string;
   guest_phone: string;
@@ -21,7 +22,13 @@ interface BookingItem {
   check_out: string;
   total_days: number;
   total_price: number;
-  status: string;
+  status: string; // 'confirmed', 'new', 'blocked'
+}
+
+interface Unit {
+  id: string;
+  property_id: string;
+  name: string;
 }
 
 const PRESET_AMENITIES = [
@@ -41,6 +48,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<{ id?: string; name: string; phone: string } | null>(null);
   const [properties, setProperties] = useState<Property[]>([]);
+  const [units, setUnits] = useState<Unit[]>([]);
   const [bookings, setBookings] = useState<BookingItem[]>([]);
   const [stats, setStats] = useState({
     totalRevenue: 0,
@@ -57,10 +65,43 @@ export default function DashboardPage() {
   const [selectedDayBookings, setSelectedDayBookings] = useState<BookingItem[] | null>(null);
   const [selectedDayDate, setSelectedDayDate] = useState<string | null>(null);
 
+  // Модалка блокировки дат
+  const [isBlockModalOpen, setIsBlockModalOpen] = useState(false);
+  const [blockForm, setBlockForm] = useState({
+    property_id: '',
+    unit_id: '',
+    check_in: '',
+    check_out: '',
+    source_note: 'Авито',
+  });
+  const [savingBlock, setSavingBlock] = useState(false);
+  const [blockError, setBlockError] = useState('');
+
   // Редактирование объекта
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [editFormData, setEditFormData] = useState<any>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+
+  const loadData = async (phone: string) => {
+    try {
+      const res = await fetch(`/api/landlord/properties?phone=${encodeURIComponent(phone)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setProperties(data.properties || []);
+        setBookings(data.bookings || []);
+        if (data.stats) setStats(data.stats);
+
+        // Инициализируем выбранный объект для блокировки дат
+        if (data.properties && data.properties.length > 0 && !blockForm.property_id) {
+          setBlockForm((prev) => ({ ...prev, property_id: data.properties[0].id }));
+        }
+      }
+    } catch (err) {
+      console.error('Ошибка загрузки данных кабинета:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     const stored = localStorage.getItem('landlord_user');
@@ -71,24 +112,7 @@ export default function DashboardPage() {
 
     const parsedUser = JSON.parse(stored);
     setUser(parsedUser);
-
-    async function loadData() {
-      try {
-        const res = await fetch(`/api/landlord/properties?phone=${encodeURIComponent(parsedUser.phone)}`);
-        if (res.ok) {
-          const data = await res.json();
-          setProperties(data.properties || []);
-          setBookings(data.bookings || []);
-          if (data.stats) setStats(data.stats);
-        }
-      } catch (err) {
-        console.error('Ошибка загрузки данных кабинета:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadData();
+    loadData(parsedUser.phone);
   }, [router]);
 
   const handleLogout = () => {
@@ -105,23 +129,19 @@ export default function DashboardPage() {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
   };
 
-  // Логика построения дней календаря
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
 
   const firstDayOfMonth = new Date(year, month, 1);
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   
-  // Приводим к понедельнику (0 = Пн, 6 = Вс)
   let startDayOfWeek = firstDayOfMonth.getDay() - 1;
   if (startDayOfWeek === -1) startDayOfWeek = 6;
 
-  // Фильтр броней по выбранному объекту
   const filteredBookings = selectedPropertyFilter === 'all'
     ? bookings
     : bookings.filter((b) => b.property_id === selectedPropertyFilter);
 
-  // Поиск бронирований на конкретную дату YYYY-MM-DD
   const getBookingsForDate = (dateStr: string) => {
     const target = new Date(dateStr).getTime();
     return filteredBookings.filter((b) => {
@@ -131,7 +151,49 @@ export default function DashboardPage() {
     });
   };
 
-  // Открытие модалки редактирования
+  // Сохранение ручной блокировки дат
+  const handleSaveBlock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingBlock(true);
+    setBlockError('');
+
+    try {
+      const res = await fetch('/api/landlord/block-dates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(blockForm),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Ошибка при закрытии дат');
+
+      setIsBlockModalOpen(false);
+      if (user) loadData(user.phone);
+    } catch (err: any) {
+      setBlockError(err.message || 'Не удалось заблокировать даты');
+    } finally {
+      setSavingBlock(false);
+    }
+  };
+
+  // Снятие блокировки дат
+  const handleUnlockBooking = async (bookingId: string) => {
+    if (!confirm('Вы уверены, что хотите разблокировать эти даты?')) return;
+
+    try {
+      const res = await fetch(`/api/landlord/block-dates?id=${bookingId}`, {
+        method: 'DELETE',
+      });
+
+      if (res.ok) {
+        setSelectedDayBookings(null);
+        if (user) loadData(user.phone);
+      }
+    } catch (err) {
+      console.error('Ошибка удаления блокировки:', err);
+    }
+  };
+
   const handleOpenEdit = (p: Property) => {
     setEditingProperty(p);
     setEditFormData({
@@ -195,7 +257,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <p className="text-sm font-semibold text-slate-500 animate-pulse">Загрузка данных кабинета...</p>
+        <p className="text-sm font-semibold text-slate-500 animate-pulse">Загрузка кабинета...</p>
       </div>
     );
   }
@@ -234,20 +296,30 @@ export default function DashboardPage() {
           <div>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900">Панель управления</h1>
             <p className="text-slate-500 text-sm mt-1">
-              Финансовый отчет, шахматка занятости и управление домами.
+              Финансовый отчет, шахматка занятости и управление датами.
             </p>
           </div>
 
-          <Link
-            href="/add-property"
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-3 rounded-xl transition-colors inline-flex items-center space-x-1.5 shadow-lg shadow-blue-500/20"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Добавить новое жилье</span>
-          </Link>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setIsBlockModalOpen(true)}
+              className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-3.5 py-3 rounded-xl transition-colors inline-flex items-center space-x-1.5 shadow-sm cursor-pointer"
+            >
+              <Lock className="w-4 h-4 text-amber-400" />
+              <span>Закрыть свои даты</span>
+            </button>
+
+            <Link
+              href="/add-property"
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-3 rounded-xl transition-colors inline-flex items-center space-x-1.5 shadow-lg shadow-blue-500/20"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Добавить жилье</span>
+            </Link>
+          </div>
         </div>
 
-        {/* 1. БЛОК АНАЛИТИКИ И ВЫРУЧКИ */}
+        {/* 1. БЛОК АНАЛИТИКИ */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-2">
             <div className="flex items-center justify-between">
@@ -279,7 +351,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <p className="text-2xl font-black text-slate-900">{stats.totalGuests} туристов</p>
-            <p className="text-[11px] text-slate-400">Оформили бронирование</p>
+            <p className="text-[11px] text-slate-400">Оформили через платформу</p>
           </div>
 
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-2">
@@ -294,7 +366,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 2. ИНТЕРАКТИВНЫЙ КАЛЕНДАРЬ ЗАСЕЛЕННОСТИ */}
+        {/* 2. ШАХМАТКА ЗАНЯТОСТИ С РУЧНЫМИ БЛОКИРОВКАМИ */}
         <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
             <div className="flex items-center space-x-3">
@@ -303,12 +375,11 @@ export default function DashboardPage() {
               </div>
               <div>
                 <h2 className="text-lg font-bold text-slate-900">Шахматка заселённости</h2>
-                <p className="text-xs text-slate-500">Нажмите на любой занятый день, чтобы увидеть детали брони</p>
+                <p className="text-xs text-slate-500">Синие плашки — брони с сайта, серые — ваши закрытые даты (Авито и др.)</p>
               </div>
             </div>
 
             <div className="flex items-center space-x-3">
-              {/* Фильтр по объектам */}
               <select
                 value={selectedPropertyFilter}
                 onChange={(e) => setSelectedPropertyFilter(e.target.value)}
@@ -320,28 +391,20 @@ export default function DashboardPage() {
                 ))}
               </select>
 
-              {/* Листание месяцев */}
               <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl">
-                <button
-                  onClick={prevMonth}
-                  className="p-1.5 hover:bg-white rounded-lg transition-colors text-slate-700"
-                >
+                <button onClick={prevMonth} className="p-1.5 hover:bg-white rounded-lg transition-colors text-slate-700">
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 <span className="text-xs font-bold text-slate-800 px-2 min-w-[120px] text-center">
                   {MONTH_NAMES[month]} {year}
                 </span>
-                <button
-                  onClick={nextMonth}
-                  className="p-1.5 hover:bg-white rounded-lg transition-colors text-slate-700"
-                >
+                <button onClick={nextMonth} className="p-1.5 hover:bg-white rounded-lg transition-colors text-slate-700">
                   <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Сетка календаря */}
           <div>
             <div className="grid grid-cols-7 gap-2 mb-2 text-center text-xs font-bold text-slate-400">
               {DAY_NAMES.map((d, i) => (
@@ -350,17 +413,17 @@ export default function DashboardPage() {
             </div>
 
             <div className="grid grid-cols-7 gap-2">
-              {/* Пустые ячейки до начала месяца */}
               {[...Array(startDayOfWeek)].map((_, i) => (
                 <div key={`empty-${i}`} className="h-16 sm:h-20 bg-slate-50/50 rounded-2xl border border-dashed border-slate-100" />
               ))}
 
-              {/* Дни месяца */}
               {[...Array(daysInMonth)].map((_, i) => {
                 const dayNum = i + 1;
                 const formattedDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
                 const dayBookings = getBookingsForDate(formattedDate);
                 const isOccupied = dayBookings.length > 0;
+
+                const hasPlatformBooking = dayBookings.some((b) => b.status !== 'blocked');
 
                 return (
                   <div
@@ -373,16 +436,18 @@ export default function DashboardPage() {
                     }}
                     className={`h-16 sm:h-20 p-1.5 sm:p-2 rounded-2xl border transition-all flex flex-col justify-between ${
                       isOccupied
-                        ? 'bg-blue-50/80 border-blue-200 hover:border-blue-400 cursor-pointer shadow-sm hover:scale-[1.02]'
+                        ? hasPlatformBooking
+                          ? 'bg-blue-50/80 border-blue-200 hover:border-blue-400 cursor-pointer shadow-sm hover:scale-[1.02]'
+                          : 'bg-slate-100 border-slate-300 hover:border-slate-400 cursor-pointer shadow-sm hover:scale-[1.02]'
                         : 'bg-white border-slate-100 text-slate-400'
                     }`}
                   >
                     <div className="flex justify-between items-center">
-                      <span className={`text-xs font-bold ${isOccupied ? 'text-blue-700' : 'text-slate-600'}`}>
+                      <span className={`text-xs font-bold ${isOccupied ? (hasPlatformBooking ? 'text-blue-700' : 'text-slate-700') : 'text-slate-600'}`}>
                         {dayNum}
                       </span>
                       {isOccupied && (
-                        <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                        <span className={`w-2 h-2 rounded-full ${hasPlatformBooking ? 'bg-blue-600' : 'bg-slate-500'}`}></span>
                       )}
                     </div>
 
@@ -391,13 +456,15 @@ export default function DashboardPage() {
                         {dayBookings.slice(0, 2).map((b, idx) => (
                           <div
                             key={idx}
-                            className="text-[9px] sm:text-[10px] font-bold bg-blue-600 text-white rounded-lg px-1.5 py-0.5 truncate"
+                            className={`text-[9px] sm:text-[10px] font-bold text-white rounded-lg px-1.5 py-0.5 truncate ${
+                              b.status === 'blocked' ? 'bg-slate-600' : 'bg-blue-600'
+                            }`}
                           >
-                            {b.guest_name}
+                            {b.status === 'blocked' ? `🔒 ${b.guest_name}` : b.guest_name}
                           </div>
                         ))}
                         {dayBookings.length > 2 && (
-                          <span className="text-[9px] text-blue-600 font-bold">+{dayBookings.length - 2} еще</span>
+                          <span className="text-[9px] text-slate-600 font-bold">+{dayBookings.length - 2} еще</span>
                         )}
                       </div>
                     )}
@@ -408,20 +475,17 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 3. МОИ ОБЪЯВЛЕНИЯ С ПОЛНЫМ РЕДАКТИРОВАНИЕМ */}
+        {/* 3. МОИ ОБЪЯВЛЕНИЯ */}
         <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
           <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-            <h2 className="text-lg font-bold text-slate-900">Мои объекты недвижимости ({properties.length})</h2>
+            <h2 className="text-lg font-bold text-slate-900">Мои объекты ({properties.length})</h2>
           </div>
 
           {properties.length === 0 ? (
             <div className="text-center py-10">
               <p className="text-slate-500 text-sm mb-4">У вас пока нет добавленных объектов.</p>
-              <Link
-                href="/add-property"
-                className="bg-blue-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl hover:bg-blue-700 transition-colors inline-block"
-              >
-                Добавить первый дом
+              <Link href="/add-property" className="bg-blue-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl hover:bg-blue-700 transition-colors inline-block">
+                Добавить объект
               </Link>
             </div>
           ) : (
@@ -430,26 +494,17 @@ export default function DashboardPage() {
                 const photo = p.photos?.[0] || 'https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=600&q=80';
 
                 return (
-                  <div
-                    key={p.id}
-                    className="p-4 sm:p-5 rounded-2xl border border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 hover:border-slate-300 transition-all bg-slate-50/50"
-                  >
+                  <div key={p.id} className="p-4 sm:p-5 rounded-2xl border border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-slate-50/50">
                     <div className="flex items-center space-x-4">
                       <img src={photo} alt={p.title} className="w-20 h-20 rounded-2xl object-cover flex-shrink-0" />
                       <div>
                         <div className="flex items-center space-x-2">
                           <h3 className="font-bold text-slate-900 text-sm sm:text-base">{p.title}</h3>
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                              p.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
-                            }`}
-                          >
-                            {p.is_active ? 'Опубликован' : 'Снят с публикации'}
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${p.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
+                            {p.is_active ? 'Опубликован' : 'Скрыт'}
                           </span>
                         </div>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          {p.address} • {p.distance_to_sea} м до моря • до {p.max_guests} гостей
-                        </p>
+                        <p className="text-xs text-slate-500 mt-0.5">{p.address} • {p.distance_to_sea} м до моря</p>
                         <p className="text-sm font-black text-blue-600 mt-1">
                           {p.price_per_night.toLocaleString('ru-RU')} ₽ <span className="text-xs text-slate-400 font-normal">/ ночь</span>
                         </p>
@@ -457,21 +512,12 @@ export default function DashboardPage() {
                     </div>
 
                     <div className="flex items-center space-x-2 w-full md:w-auto justify-end pt-2 md:pt-0 border-t md:border-t-0 border-slate-200">
-                      <button
-                        onClick={() => handleOpenEdit(p)}
-                        className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl flex items-center space-x-1.5 transition-colors shadow-sm"
-                      >
+                      <button onClick={() => handleOpenEdit(p)} className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl flex items-center space-x-1.5 transition-colors">
                         <Edit3 className="w-3.5 h-3.5" />
-                        <span>Редактировать всё</span>
+                        <span>Редактировать</span>
                       </button>
 
-                      <button
-                        onClick={() => togglePropertyStatus(p)}
-                        className={`p-2.5 rounded-xl text-xs font-bold transition-colors ${
-                          p.is_active ? 'bg-slate-200 hover:bg-slate-300 text-slate-700' : 'bg-blue-600 text-white'
-                        }`}
-                        title={p.is_active ? 'Скрыть объявление' : 'Опубликовать'}
-                      >
+                      <button onClick={() => togglePropertyStatus(p)} className={`p-2.5 rounded-xl text-xs font-bold transition-colors ${p.is_active ? 'bg-slate-200 hover:bg-slate-300 text-slate-700' : 'bg-blue-600 text-white'}`}>
                         {p.is_active ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
@@ -483,58 +529,164 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* МОДАЛЬНОЕ ОКНО: ДЕТАЛИ БРОНИ В ВЫБРАННЫЙ ДЕНЬ */}
+      {/* МОДАЛЬНОЕ ОКНО: ЗАКРЫТИЕ СВОИХ ДАТ (АВИТО И ДР.) */}
+      {isBlockModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 relative shadow-2xl space-y-4">
+            <button onClick={() => setIsBlockModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1">
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center space-x-2">
+              <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                <Lock className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Закрыть даты</h3>
+                <p className="text-xs text-slate-500">Заблокирует даты для туристов на сайте</p>
+              </div>
+            </div>
+
+            {blockError && (
+              <div className="p-3 bg-red-50 text-red-600 text-xs rounded-xl">{blockError}</div>
+            )}
+
+            <form onSubmit={handleSaveBlock} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Выберите объект</label>
+                <select
+                  value={blockForm.property_id}
+                  onChange={(e) => setBlockForm({ ...blockForm, property_id: e.target.value })}
+                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 font-semibold"
+                >
+                  {properties.map((p) => (
+                    <option key={p.id} value={p.id}>{p.title}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">С даты</label>
+                  <input
+                    type="date"
+                    required
+                    value={blockForm.check_in}
+                    onChange={(e) => setBlockForm({ ...blockForm, check_in: e.target.value })}
+                    className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">По дату</label>
+                  <input
+                    type="date"
+                    required
+                    value={blockForm.check_out}
+                    onChange={(e) => setBlockForm({ ...blockForm, check_out: e.target.value })}
+                    className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Причина / Источник брони</label>
+                <select
+                  value={blockForm.source_note}
+                  onChange={(e) => setBlockForm({ ...blockForm, source_note: e.target.value })}
+                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5"
+                >
+                  <option value="Авито">Клиент с Авито</option>
+                  <option value="Суточно.ру">Клиент с Суточно.ру</option>
+                  <option value="Звонок / Постоянные клиенты">Звонок / Постоянный клиент</option>
+                  <option value="Личный приезд / Семья">Личный приезд / Семья</option>
+                  <option value="Ремонт / Уборка">Ремонт / Генеральная уборка</option>
+                </select>
+              </div>
+
+              <button
+                type="submit"
+                disabled={savingBlock}
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs py-3.5 rounded-xl transition-colors mt-2"
+              >
+                {savingBlock ? 'Сохранение...' : 'Заблокировать выбранные дни'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* МОДАЛЬНОЕ ОКНО: ДЕТАЛИ БРОНИ И РАЗБЛОКИРОВКА */}
       {selectedDayBookings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 relative shadow-2xl space-y-4">
-            <button
-              onClick={() => setSelectedDayBookings(null)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1"
-            >
+            <button onClick={() => setSelectedDayBookings(null)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1">
               <X className="w-5 h-5" />
             </button>
 
             <h3 className="text-lg font-bold text-slate-900">
-              Бронирование на {selectedDayDate}
+              Занятость на {selectedDayDate}
             </h3>
 
             <div className="space-y-3">
-              {selectedDayBookings.map((b) => (
-                <div key={b.id} className="p-4 bg-blue-50 rounded-2xl border border-blue-100 space-y-2">
-                  <p className="font-bold text-sm text-blue-950">{b.property_title}</p>
-                  <div className="text-xs text-slate-700 space-y-1">
-                    <div className="flex items-center">
-                      <User className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
-                      <span>Гость: <strong>{b.guest_name}</strong></span>
+              {selectedDayBookings.map((b) => {
+                const isBlocked = b.status === 'blocked';
+
+                return (
+                  <div key={b.id} className={`p-4 rounded-2xl border space-y-2 ${isBlocked ? 'bg-slate-100 border-slate-200' : 'bg-blue-50 border-blue-100'}`}>
+                    <div className="flex items-center justify-between">
+                      <p className="font-bold text-sm text-slate-900">{b.property_title}</p>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${isBlocked ? 'bg-slate-200 text-slate-700' : 'bg-blue-600 text-white'}`}>
+                        {isBlocked ? 'Своя блокировка' : 'DagBooking'}
+                      </span>
                     </div>
-                    <div className="flex items-center">
-                      <Phone className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
-                      <span>Телефон: <strong>{b.guest_phone}</strong></span>
+
+                    <div className="text-xs text-slate-700 space-y-1">
+                      <div className="flex items-center">
+                        <User className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
+                        <span>{isBlocked ? 'Источник:' : 'Гость:'} <strong>{b.guest_name}</strong></span>
+                      </div>
+                      {!isBlocked && (
+                        <div className="flex items-center">
+                          <Phone className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
+                          <span>Телефон: <strong>{b.guest_phone}</strong></span>
+                        </div>
+                      )}
+                      <div className="flex items-center">
+                        <CalendarIcon className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
+                        <span>Даты: с {b.check_in.slice(0, 10)} по {b.check_out.slice(0, 10)} ({b.total_days} н.)</span>
+                      </div>
+                      {!isBlocked && (
+                        <div className="flex items-center">
+                          <DollarSign className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
+                          <span>Сумма: <strong>{b.total_price.toLocaleString('ru-RU')} ₽</strong></span>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-center">
-                      <CalendarIcon className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
-                      <span>Даты: с {b.check_in.slice(0, 10)} по {b.check_out.slice(0, 10)} ({b.total_days} н.)</span>
-                    </div>
-                    <div className="flex items-center">
-                      <DollarSign className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
-                      <span>Сумма: <strong>{b.total_price.toLocaleString('ru-RU')} ₽</strong></span>
-                    </div>
+
+                    {isBlocked && (
+                      <div className="pt-2 border-t border-slate-200">
+                        <button
+                          onClick={() => handleUnlockBooking(b.id)}
+                          className="w-full bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs py-2 rounded-xl flex items-center justify-center space-x-1 transition-colors"
+                        >
+                          <Unlock className="w-3.5 h-3.5" />
+                          <span>Разблокировать / Открыть даты</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
       )}
 
-      {/* МОДАЛЬНОЕ ОКНО: ПОЛНОЕ РЕДАКТИРОВАНИЕ ОБЪЕКТА */}
+      {/* МОДАЛЬНОЕ ОКНО: РЕДАКТИРОВАНИЕ */}
       {editingProperty && editFormData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 relative shadow-2xl max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => setEditingProperty(null)}
-              className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 p-1"
-            >
+            <button onClick={() => setEditingProperty(null)} className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 p-1">
               <X className="w-6 h-6" />
             </button>
 
@@ -622,7 +774,6 @@ export default function DashboardPage() {
                 />
               </div>
 
-              {/* Удобства и бонусы */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Удобства и бонусы</label>
                 <div className="flex flex-wrap gap-1.5">
@@ -634,9 +785,7 @@ export default function DashboardPage() {
                         type="button"
                         onClick={() => toggleAmenity(amenity)}
                         className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-all ${
-                          isSelected
-                            ? 'bg-blue-600 text-white border-blue-600'
-                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                          isSelected ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-600 border-slate-200'
                         }`}
                       >
                         {isSelected ? '✓ ' : '+ '}{amenity}
@@ -647,18 +796,10 @@ export default function DashboardPage() {
               </div>
 
               <div className="pt-4 flex items-center justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setEditingProperty(null)}
-                  className="text-xs font-bold text-slate-600 px-4 py-2.5 rounded-xl hover:bg-slate-100"
-                >
+                <button type="button" onClick={() => setEditingProperty(null)} className="text-xs font-bold text-slate-600 px-4 py-2.5 rounded-xl hover:bg-slate-100">
                   Отмена
                 </button>
-                <button
-                  type="submit"
-                  disabled={savingEdit}
-                  className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-6 py-2.5 rounded-xl shadow-lg shadow-blue-500/25"
-                >
+                <button type="submit" disabled={savingEdit} className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-6 py-2.5 rounded-xl">
                   {savingEdit ? 'Сохранение...' : 'Сохранить изменения'}
                 </button>
               </div>

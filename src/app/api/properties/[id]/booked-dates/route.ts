@@ -10,25 +10,23 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const unitId = searchParams.get('unit_id');
 
-    // Если передан конкретный домик, ищем брони для него, иначе для всего объекта
     let bookings;
     if (unitId && unitId !== 'all') {
       bookings = await sql`
-        SELECT check_in, check_out, unit_id
+        SELECT check_in, check_out, unit_id, status
         FROM bookings 
         WHERE (property_id = ${id} OR unit_id = ${unitId})
           AND unit_id = ${unitId}
-          AND status IN ('new', 'confirmed')
+          AND status IN ('new', 'confirmed', 'blocked')
       `;
     } else {
       bookings = await sql`
-        SELECT check_in, check_out, unit_id
+        SELECT check_in, check_out, unit_id, status
         FROM bookings 
-        WHERE property_id = ${id} AND status IN ('new', 'confirmed')
+        WHERE property_id = ${id} AND status IN ('new', 'confirmed', 'blocked')
       `;
     }
 
-    // Также отдаем список всех доступных домиков
     const units = await sql`
       SELECT id, name FROM property_units WHERE property_id = ${id} ORDER BY created_at ASC
     `;
