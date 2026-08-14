@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, User, Phone, Send, CheckCircle2, CalendarX } from 'lucide-react';
+import { X, User, Phone, Send, CheckCircle2, CalendarX, Home } from 'lucide-react';
 import { Property } from '@/types/property';
 
 interface BookingModalProps {
@@ -12,6 +12,12 @@ interface BookingModalProps {
 interface BookedRange {
   check_in: string;
   check_out: string;
+  unit_id?: string;
+}
+
+interface Unit {
+  id: string;
+  name: string;
 }
 
 export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose }) => {
@@ -22,31 +28,38 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
   const [checkOut, setCheckOut] = useState('');
   const [guestsCount, setGuestsCount] = useState(1);
 
+  // Список домиков и выбранный домик
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [selectedUnitId, setSelectedUnitId] = useState<string>('');
+
   const [bookedRanges, setBookedRanges] = useState<BookedRange[]>([]);
   const [loading, setLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Загружаем уже забронированные даты для объекта
+  // Загружаем занятые даты и список домиков для объекта
   useEffect(() => {
     if (!property) return;
     async function fetchBookedDates() {
       try {
-        const res = await fetch(`/api/properties/${property?.id}/booked-dates`);
+        const res = await fetch(`/api/properties/${property?.id}/booked-dates?unit_id=${selectedUnitId || 'all'}`);
         if (res.ok) {
           const data = await res.json();
           setBookedRanges(data.bookings || []);
+          if (data.units && data.units.length > 0 && units.length === 0) {
+            setUnits(data.units);
+            setSelectedUnitId(data.units[0].id);
+          }
         }
       } catch (err) {
-        console.error('Не удалось подгрузить занятые даты', err);
+        console.error('Не удалось подгрузить даты', err);
       }
     }
     fetchBookedDates();
-  }, [property]);
+  }, [property, selectedUnitId]);
 
   if (!property) return null;
 
-  // Проверка, попадает ли дата в занятый диапазон
   const isDateRangeOverlapping = (startStr: string, endStr: string) => {
     if (!startStr || !endStr) return false;
     const start = new Date(startStr);
@@ -81,9 +94,8 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
       return;
     }
 
-    // Блокировка отправки, если даты уже забронированы
     if (isDateRangeOverlapping(checkIn, checkOut)) {
-      setErrorMsg('К сожалению, эти даты уже забронированы другим гостем. Пожалуйста, выберите другие даты.');
+      setErrorMsg('К сожалению, этот домик уже забронирован на выбранные даты. Выберите другой домик или другие даты.');
       return;
     }
 
@@ -95,6 +107,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           property_id: property.id,
+          unit_id: selectedUnitId || null,
           check_in: checkIn,
           check_out: checkOut,
           total_days: days,
@@ -131,7 +144,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
             <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto animate-bounce" />
             <h3 className="text-2xl font-black text-slate-800">Заявка отправлена!</h3>
             <p className="text-slate-600 text-sm leading-relaxed">
-              Спасибо, <strong>{guestName}</strong>! Менеджер сервиса свяжется с вами для подтверждения бронирования.
+              Спасибо, <strong>{guestName}</strong>! Менеджер свяжется с вами для подтверждения бронирования.
             </p>
             <button
               onClick={onClose}
@@ -145,12 +158,31 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
             <h3 className="text-xl font-bold text-slate-900 mb-1">Забронировать жилье</h3>
             <p className="text-xs text-blue-600 font-medium mb-4 line-clamp-1">{property.title}</p>
 
-            {/* Список уже занятых дат для информации гостя */}
+            {/* Выбор домика, если в объекте их несколько */}
+            {units.length > 1 && (
+              <div className="mb-4">
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1 flex items-center">
+                  <Home className="w-3.5 h-3.5 mr-1 text-blue-600" />
+                  <span>Выберите домик / номер:</span>
+                </label>
+                <select
+                  value={selectedUnitId}
+                  onChange={(e) => setSelectedUnitId(e.target.value)}
+                  className="w-full text-xs font-bold bg-blue-50/60 border border-blue-200 text-blue-900 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-blue-500"
+                >
+                  {units.map((u) => (
+                    <option key={u.id} value={u.id}>{u.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Занятые даты выбранного домика */}
             {bookedRanges.length > 0 && (
               <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-2xl">
                 <div className="flex items-center text-amber-800 text-xs font-bold mb-1">
                   <CalendarX className="w-4 h-4 mr-1 text-amber-600" />
-                  <span>Занятые даты для этого дома:</span>
+                  <span>Занятые даты для этого варианта:</span>
                 </div>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {bookedRanges.map((r, i) => (
@@ -177,7 +209,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
                     required
                     value={checkIn}
                     onChange={(e) => setCheckIn(e.target.value)}
-                    className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
                 <div>
@@ -187,7 +219,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
                     required
                     value={checkOut}
                     onChange={(e) => setCheckOut(e.target.value)}
-                    className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
@@ -197,7 +229,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
                 <select
                   value={guestsCount}
                   onChange={(e) => setGuestsCount(Number(e.target.value))}
-                  className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-blue-500"
                 >
                   {[...Array(property.max_guests)].map((_, i) => (
                     <option key={i + 1} value={i + 1}>
@@ -217,7 +249,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
                     placeholder="Магомед"
                     value={guestName}
                     onChange={(e) => setGuestName(e.target.value)}
-                    className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
@@ -232,7 +264,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
                     placeholder="+7 988 000 00 00"
                     value={guestPhone}
                     onChange={(e) => setGuestPhone(e.target.value)}
-                    className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
@@ -246,7 +278,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
                     placeholder="@username"
                     value={guestTelegram}
                     onChange={(e) => setGuestTelegram(e.target.value)}
-                    className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
@@ -266,7 +298,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
                 disabled={loading}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm py-3.5 rounded-xl transition-colors shadow-lg shadow-blue-500/30"
               >
-                {loading ? 'Проверка и отправка...' : 'Подтвердить бронирование'}
+                {loading ? 'Проверка дат...' : 'Подтвердить бронирование'}
               </button>
             </form>
           </div>

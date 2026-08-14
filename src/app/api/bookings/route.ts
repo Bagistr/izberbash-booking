@@ -6,6 +6,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const {
       property_id,
+      unit_id,
       check_in,
       check_out,
       total_days,
@@ -17,23 +18,32 @@ export async function POST(request: Request) {
     } = body;
 
     if (!property_id || !check_in || !check_out || !guest_name || !guest_phone) {
-      return NextResponse.json({ error: 'Заполните все обязательные поля' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Заполните обязательные поля' },
+        { status: 400 }
+      );
     }
 
     await sql`
       INSERT INTO bookings (
-        property_id, check_in, check_out, total_days, total_price, 
-        guest_name, guest_phone, guest_telegram, guests_count
+        property_id, unit_id, check_in, check_out, total_days, 
+        total_price, guest_name, guest_phone, guest_telegram, 
+        guests_count, status
       )
       VALUES (
-        ${property_id}, ${check_in}, ${check_out}, ${total_days}, ${total_price},
-        ${guest_name}, ${guest_phone}, ${guest_telegram || null}, ${guests_count}
+        ${property_id}, ${unit_id || null}, ${check_in}, ${check_out}, 
+        ${Number(total_days)}, ${Number(total_price)}, ${guest_name}, 
+        ${guest_phone}, ${guest_telegram || ''}, ${Number(guests_count) || 1}, 
+        'confirmed'
       )
     `;
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Ошибка сохранения бронирования:', error);
-    return NextResponse.json({ error: 'Ошибка сервера при сохранении заявки' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Не удалось сохранить бронирование' },
+      { status: 500 }
+    );
   }
 }

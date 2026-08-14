@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { Waves, ArrowLeft, Building2, X, CheckCircle2, ImagePlus, Plus } from 'lucide-react';
+import { Waves, ArrowLeft, Building2, X, CheckCircle2, ImagePlus, Plus, Home, Trash2 } from 'lucide-react';
 
 const PRESET_AMENITIES = [
   'Wi-Fi', 'Кондиционер', 'Мангал', 'Бассейн', 'Беседка', 
@@ -21,6 +21,10 @@ export default function AddPropertyPage() {
     description: '',
     landlord_phone: '',
   });
+
+  // Список домиков/номеров в этом объявлении
+  const [units, setUnits] = useState<string[]>(['Домик №1', 'Домик №2']);
+  const [newUnitName, setNewUnitName] = useState('');
 
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([
     'Wi-Fi', 'Кондиционер', 'Мангал'
@@ -43,7 +47,6 @@ export default function AddPropertyPage() {
     );
   };
 
-  // Добавление собственного бонуса
   const addCustomAmenity = (e?: React.MouseEvent | React.KeyboardEvent) => {
     if (e) e.preventDefault();
     const trimmed = customAmenity.trim();
@@ -56,6 +59,24 @@ export default function AddPropertyPage() {
       setSelectedAmenities((prev) => [...prev, trimmed]);
     }
     setCustomAmenity('');
+  };
+
+  // Управление домиками/номерами
+  const addUnit = () => {
+    if (newUnitName.trim()) {
+      setUnits((prev) => [...prev, newUnitName.trim()]);
+      setNewUnitName('');
+    } else {
+      setUnits((prev) => [...prev, `Домик №${prev.length + 1}`]);
+    }
+  };
+
+  const removeUnit = (index: number) => {
+    if (units.length <= 1) {
+      setErrorMsg('В объекте должен быть хотя бы один домик/номер.');
+      return;
+    }
+    setUnits((prev) => prev.filter((_, idx) => idx !== index));
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -124,6 +145,7 @@ export default function AddPropertyPage() {
           ...formData,
           amenities: selectedAmenities,
           photos,
+          units,
         }),
       });
 
@@ -137,7 +159,6 @@ export default function AddPropertyPage() {
     }
   };
 
-  // Объединяем стандартные и пользовательские бонусы для отображения
   const allAvailableAmenities = [...PRESET_AMENITIES, ...customAmenitiesList];
 
   return (
@@ -165,7 +186,7 @@ export default function AddPropertyPage() {
             <div className="text-center py-8 space-y-4">
               <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto" />
               <h2 className="text-2xl font-black text-slate-900">Объект успешно добавлен!</h2>
-              <p className="text-slate-600 text-sm">Ваш объект опубликован в каталоге.</p>
+              <p className="text-slate-600 text-sm">Ваш комплекс и все домики опубликованы в каталоге.</p>
               <Link href="/" className="inline-block bg-blue-600 text-white font-bold py-3 px-8 rounded-xl hover:bg-blue-700 transition-colors">
                 Посмотреть в каталоге
               </Link>
@@ -186,16 +207,66 @@ export default function AddPropertyPage() {
 
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Название объекта *</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Название комплекса / базы *</label>
                   <input
                     type="text"
                     name="title"
                     required
-                    placeholder="Пример: Коттедж у моря с бассеном и мангалом"
+                    placeholder="Пример: Коттеджный комплекс «Каспийский бриз»"
                     value={formData.title}
                     onChange={handleChange}
                     className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500"
                   />
+                </div>
+
+                {/* БЛОК: ДОМИКИ / НОМЕРА В КОМПЛЕКСЕ */}
+                <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Home className="w-4 h-4 text-blue-600" />
+                      <label className="text-xs font-bold text-slate-800 uppercase">
+                        Домики / Номера в этом объекте ({units.length})
+                      </label>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-normal">
+                    Если у вас несколько одинаковых домиков или номеров, добавьте их сюда. На каждый будет вестись свой отдельный календарь броней.
+                  </p>
+
+                  <div className="space-y-2">
+                    {units.map((u, idx) => (
+                      <div key={idx} className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold">
+                        <span className="text-slate-800">{u}</span>
+                        {units.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeUnit(idx)}
+                            className="text-slate-400 hover:text-red-600 p-1"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-2 pt-1">
+                    <input
+                      type="text"
+                      placeholder="Название нового домика (напр. Коттедж №3)"
+                      value={newUnitName}
+                      onChange={(e) => setNewUnitName(e.target.value)}
+                      className="flex-1 text-xs bg-white border border-slate-200 rounded-xl px-3 py-2"
+                    />
+                    <button
+                      type="button"
+                      onClick={addUnit}
+                      className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-2 rounded-xl flex items-center space-x-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Добавить</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -213,7 +284,7 @@ export default function AddPropertyPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Цена за сутки (₽) *</label>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Цена за 1 домик в сутки (₽) *</label>
                     <input
                       type="number"
                       name="price_per_night"
@@ -241,7 +312,7 @@ export default function AddPropertyPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Макс. гостей</label>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Вместимость 1 домика (гостей)</label>
                     <input
                       type="number"
                       name="max_guests"
@@ -280,10 +351,10 @@ export default function AddPropertyPage() {
                   />
                 </div>
 
-                {/* ВЫБОР БОНУСОВ И УДОБСТВ */}
+                {/* БОНУСЫ */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-2">
-                    Бонусы и удобства дома
+                    Бонусы и удобства
                   </label>
                   <div className="flex flex-wrap gap-2 mb-3">
                     {allAvailableAmenities.map((amenity) => {
@@ -305,7 +376,6 @@ export default function AddPropertyPage() {
                     })}
                   </div>
 
-                  {/* Добавление своего бонуса */}
                   <div className="flex gap-2">
                     <input
                       type="text"
@@ -331,7 +401,7 @@ export default function AddPropertyPage() {
                   </div>
                 </div>
 
-                {/* ФОТОГРАФИИ */}
+                {/* ФОТО */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Фотографии *</label>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-2">
@@ -361,7 +431,7 @@ export default function AddPropertyPage() {
                   <textarea
                     name="description"
                     rows={3}
-                    placeholder="Панорамные окна, беседка, закрытый двор..."
+                    placeholder="Панорамные окна, закрытая территория, зона барбекю..."
                     value={formData.description}
                     onChange={handleChange}
                     className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500"
@@ -373,7 +443,7 @@ export default function AddPropertyPage() {
                   disabled={loading || uploading}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm py-4 rounded-2xl transition-colors shadow-lg shadow-blue-500/25"
                 >
-                  {loading ? 'Публикация...' : 'Опубликовать объект'}
+                  {loading ? 'Публикация...' : 'Опубликовать комплекс'}
                 </button>
               </form>
             </div>

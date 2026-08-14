@@ -2,18 +2,30 @@ import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { sql } from '@/lib/db';
 
-// Метод получения всех объектов (теперь страница детального просмотра сможет их найти)
+// Получение списка объектов с их домиками
 export async function GET() {
   try {
-    const rows = await sql`SELECT * FROM properties WHERE is_active = true ORDER BY created_at DESC`;
-    return NextResponse.json(rows);
+    const properties = await sql`
+      SELECT * FROM properties 
+      WHERE is_active = true 
+      ORDER BY created_at DESC
+    `;
+
+    const units = await sql`SELECT * FROM property_units`;
+
+    const propertiesWithUnits = properties.map((p) => ({
+      ...p,
+      units: units.filter((u) => u.property_id === p.id),
+    }));
+
+    return NextResponse.json(propertiesWithUnits);
   } catch (error) {
-    console.error('Ошибка получения списка объектов:', error);
+    console.error('Ошибка получения объектов:', error);
     return NextResponse.json({ error: 'Ошибка сервера' }, { status: 500 });
   }
 }
 
-// Метод создания нового объекта
+// Создание объекта вместе с домиками/номерами
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -28,6 +40,7 @@ export async function POST(request: Request) {
       amenities,
       photos,
       landlord_phone,
+      units, // Массив названий домиков, например ['Коттедж №1', 'Коттедж №2']
     } = body;
 
     if (!title || !price_per_night || !distance_to_sea || !address || !landlord_phone) {
@@ -39,19 +52,24 @@ export async function POST(request: Request) {
 
     const slug = `${title.toLowerCase().replace(/[^a-z0-9а-яё]/g, '-')}-${Date.now()}`;
 
-    const amenitiesArray = typeof amenities === 'string' 
+    const amenitiesArray = Array.isArray(amenities)
+      ? amenities
+      : typeof amenities === 'string'
       ? amenities.split(',').map((a: string) => a.trim()).filter(Boolean)
-      : amenities || [];
+      : [];
 
-    const photosArray = typeof photos === 'string'
+    const photosArray = Array.isArray(photos)
+      ? photos
+      : typeof photos === 'string'
       ? photos.split('\n').map((p: string) => p.trim()).filter(Boolean)
-      : photos || [];
+      : [];
 
-    const finalPhotos = photosArray.length > 0 
-      ? photosArray 
+    const finalPhotos = photosArray.length > 0
+      ? photosArray
       : ['https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=1000&q=80'];
 
-    await sql`
+    // 1. Создаем основной объект
+    const propertyRows = await sql`
       INSERT INTO properties (
         title, slug, property_type, price_per_night, max_guests, 
         distance_to_sea, address, description, amenities, photos, 
@@ -63,11 +81,28 @@ export async function POST(request: Request) {
         ${description || ''}, ${amenitiesArray}, ${finalPhotos}, 
         ${landlord_phone}, true
       )
+      RETURNING id
     `;
+
+    const newPropertyId = propertyRows[0].id;
+
+    // 2. Создаем домики (если указаны) или создаем 1 дефолтный
+    const unitsList = units && Array.isArray(units) && units.length > 0
+      ? units
+      : ['Основной домик'];
+
+    for (const unitName of unitsList) {
+      if (unitName.trim()) {
+        await sql`
+          INSERT INTO property_units (property_id, name)
+          VALUES (${newPropertyId}, ${unitName.trim()})
+        `;
+      }
+    }
 
     revalidatePath('/');
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, id: newPropertyId });
   } catch (error) {
     console.error('Ошибка добавления объекта:', error);
     return NextResponse.json(
