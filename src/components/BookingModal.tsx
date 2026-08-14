@@ -1,7 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, User, Phone, Send, CheckCircle2, CalendarX, Home } from 'lucide-react';
+import {
+  X, User, Phone, Send, CheckCircle2,
+  Calendar as CalendarIcon, Home, Lock, ChevronLeft, ChevronRight
+} from 'lucide-react';
 import { Property } from '@/types/property';
 
 interface BookingModalProps {
@@ -20,6 +23,12 @@ interface Unit {
   name: string;
 }
 
+const MONTH_NAMES = [
+  'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+  'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
+];
+const DAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
 export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose }) => {
   const [guestName, setGuestName] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
@@ -28,16 +37,15 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
   const [checkOut, setCheckOut] = useState('');
   const [guestsCount, setGuestsCount] = useState(1);
 
-  // Список домиков и выбранный домик
   const [units, setUnits] = useState<Unit[]>([]);
   const [selectedUnitId, setSelectedUnitId] = useState<string>('');
-
   const [bookedRanges, setBookedRanges] = useState<BookedRange[]>([]);
+  const [calDate, setCalDate] = useState(new Date());
+
   const [loading, setLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Загружаем занятые даты и список домиков для объекта
   useEffect(() => {
     if (!property) return;
     async function fetchBookedDates() {
@@ -60,16 +68,47 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
 
   if (!property) return null;
 
-  const isDateRangeOverlapping = (startStr: string, endStr: string) => {
+  // Проверка, занята ли конкретная дата YYYY-MM-DD
+  const isDateOccupied = (dateStr: string) => {
+    const target = new Date(dateStr).getTime();
+    return bookedRanges.some((range) => {
+      const bStart = new Date(range.check_in.slice(0, 10)).getTime();
+      const bEnd = new Date(range.check_out.slice(0, 10)).getTime();
+      return target >= bStart && target < bEnd;
+    });
+  };
+
+  const isRangeOverlapping = (startStr: string, endStr: string) => {
     if (!startStr || !endStr) return false;
     const start = new Date(startStr);
     const end = new Date(endStr);
 
     return bookedRanges.some((range) => {
-      const bStart = new Date(range.check_in);
-      const bEnd = new Date(range.check_out);
+      const bStart = new Date(range.check_in.slice(0, 10));
+      const bEnd = new Date(range.check_out.slice(0, 10));
       return start < bEnd && end > bStart;
     });
+  };
+
+  const handleDayClick = (dateStr: string) => {
+    if (isDateOccupied(dateStr)) return;
+
+    if (!checkIn || (checkIn && checkOut)) {
+      setCheckIn(dateStr);
+      setCheckOut('');
+    } else if (checkIn && !checkOut) {
+      if (new Date(dateStr) > new Date(checkIn)) {
+        if (isRangeOverlapping(checkIn, dateStr)) {
+          setErrorMsg('Выбранный диапазон пересекается с уже занятыми днями.');
+          return;
+        }
+        setCheckOut(dateStr);
+        setErrorMsg('');
+      } else {
+        setCheckIn(dateStr);
+        setCheckOut('');
+      }
+    }
   };
 
   const calculateTotal = () => {
@@ -90,12 +129,12 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
     setErrorMsg('');
 
     if (days <= 0) {
-      setErrorMsg('Дата выезда должна быть позже даты заезда.');
+      setErrorMsg('Пожалуйста, выберите дату заезда и выезда.');
       return;
     }
 
-    if (isDateRangeOverlapping(checkIn, checkOut)) {
-      setErrorMsg('К сожалению, этот домик уже забронирован на выбранные даты. Выберите другой домик или другие даты.');
+    if (isRangeOverlapping(checkIn, checkOut)) {
+      setErrorMsg('К сожалению, выбранные даты уже забронированы.');
       return;
     }
 
@@ -129,6 +168,14 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
     }
   };
 
+  // Построение календаря
+  const year = calDate.getFullYear();
+  const month = calDate.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
+  let startDay = firstDay.getDay() - 1;
+  if (startDay === -1) startDay = 6;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
       <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 relative shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
@@ -144,7 +191,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
             <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto animate-bounce" />
             <h3 className="text-2xl font-black text-slate-800">Заявка отправлена!</h3>
             <p className="text-slate-600 text-sm leading-relaxed">
-              Спасибо, <strong>{guestName}</strong>! Менеджер свяжется с вами для подтверждения бронирования.
+              Спасибо, <strong>{guestName}</strong>! Менеджер сервиса «Райский Пляж» свяжется с вами для подтверждения бронирования.
             </p>
             <button
               onClick={onClose}
@@ -168,7 +215,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
                 <select
                   value={selectedUnitId}
                   onChange={(e) => setSelectedUnitId(e.target.value)}
-                  className="w-full text-xs font-bold bg-blue-50/60 border border-blue-200 text-blue-900 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-blue-500"
+                  className="w-full text-xs font-bold bg-blue-50/60 border border-blue-200 text-blue-900 rounded-xl px-3 py-2.5"
                 >
                   {units.map((u) => (
                     <option key={u.id} value={u.id}>{u.name}</option>
@@ -177,22 +224,92 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
               </div>
             )}
 
-            {/* Занятые даты выбранного домика */}
-            {bookedRanges.length > 0 && (
-              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-2xl">
-                <div className="flex items-center text-amber-800 text-xs font-bold mb-1">
-                  <CalendarX className="w-4 h-4 mr-1 text-amber-600" />
-                  <span>Занятые даты для этого варианта:</span>
+            {/* ИНТЕРАКТИВНЫЙ КАЛЕНДАРЬ С ПОДСВЕТКОЙ ЗАНЯТЫХ ДНЕЙ */}
+            <div className="mb-4 p-3 sm:p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center space-x-1.5 text-xs font-bold text-slate-800">
+                  <CalendarIcon className="w-4 h-4 text-blue-600" />
+                  <span>{MONTH_NAMES[month]} {year}</span>
                 </div>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {bookedRanges.map((r, i) => (
-                    <span key={i} className="text-[11px] bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md font-medium">
-                      с {r.check_in.slice(0, 10)} по {r.check_out.slice(0, 10)}
-                    </span>
-                  ))}
+                <div className="flex space-x-1">
+                  <button
+                    type="button"
+                    onClick={() => setCalDate(new Date(year, month - 1, 1))}
+                    className="p-1 hover:bg-white rounded-lg border border-slate-200 text-slate-600"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCalDate(new Date(year, month + 1, 1))}
+                    className="p-1 hover:bg-white rounded-lg border border-slate-200 text-slate-600"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
-            )}
+
+              {/* Дни недели */}
+              <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-400 mb-1">
+                {DAY_NAMES.map((d, i) => (
+                  <div key={i}>{d}</div>
+                ))}
+              </div>
+
+              {/* Сетка дней */}
+              <div className="grid grid-cols-7 gap-1">
+                {[...Array(startDay)].map((_, i) => (
+                  <div key={`empty-${i}`} className="h-8 rounded-lg" />
+                ))}
+
+                {[...Array(totalDaysInMonth)].map((_, i) => {
+                  const dayNum = i + 1;
+                  const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                  const isOccupied = isDateOccupied(dateStr);
+                  const isSelectedStart = checkIn === dateStr;
+                  const isSelectedEnd = checkOut === dateStr;
+                  const isInRange = checkIn && checkOut && dateStr > checkIn && dateStr < checkOut;
+
+                  return (
+                    <button
+                      type="button"
+                      key={dayNum}
+                      disabled={isOccupied}
+                      onClick={() => handleDayClick(dateStr)}
+                      className={`h-8 text-xs font-bold rounded-lg transition-all flex items-center justify-center relative ${
+                        isOccupied
+                          ? 'bg-rose-100 text-rose-400 border border-rose-200 cursor-not-allowed line-through opacity-80'
+                          : isSelectedStart || isSelectedEnd
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : isInRange
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-white text-slate-700 hover:bg-blue-50 border border-slate-200'
+                      }`}
+                    >
+                      {dayNum}
+                      {isOccupied && (
+                        <Lock className="w-2.5 h-2.5 absolute top-0.5 right-0.5 text-rose-500" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="flex items-center justify-between text-[10px] text-slate-500 mt-2.5 pt-2 border-t border-slate-200">
+                <span className="flex items-center">
+                  <span className="w-2 h-2 rounded-full bg-white border border-slate-300 mr-1"></span>
+                  Свободно
+                </span>
+                <span className="flex items-center text-rose-600 font-medium">
+                  <span className="w-2 h-2 rounded-full bg-rose-400 mr-1"></span>
+                  Занято (недоступно)
+                </span>
+                <span className="flex items-center text-blue-600 font-medium">
+                  <span className="w-2 h-2 rounded-full bg-blue-600 mr-1"></span>
+                  Выбрано вами
+                </span>
+              </div>
+            </div>
 
             {errorMsg && (
               <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-xl text-xs font-medium">
@@ -209,7 +326,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
                     required
                     value={checkIn}
                     onChange={(e) => setCheckIn(e.target.value)}
-                    className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5"
                   />
                 </div>
                 <div>
@@ -219,7 +336,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
                     required
                     value={checkOut}
                     onChange={(e) => setCheckOut(e.target.value)}
-                    className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5"
                   />
                 </div>
               </div>
@@ -229,7 +346,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
                 <select
                   value={guestsCount}
                   onChange={(e) => setGuestsCount(Number(e.target.value))}
-                  className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-blue-500"
+                  className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5"
                 >
                   {[...Array(property.max_guests)].map((_, i) => (
                     <option key={i + 1} value={i + 1}>
@@ -249,7 +366,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
                     placeholder="Магомед"
                     value={guestName}
                     onChange={(e) => setGuestName(e.target.value)}
-                    className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5"
                   />
                 </div>
               </div>
@@ -264,7 +381,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
                     placeholder="+7 988 000 00 00"
                     value={guestPhone}
                     onChange={(e) => setGuestPhone(e.target.value)}
-                    className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5"
                   />
                 </div>
               </div>
@@ -278,7 +395,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
                     placeholder="@username"
                     value={guestTelegram}
                     onChange={(e) => setGuestTelegram(e.target.value)}
-                    className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5"
                   />
                 </div>
               </div>
@@ -296,7 +413,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm py-3.5 rounded-xl transition-colors shadow-lg shadow-blue-500/30"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm py-3.5 rounded-xl transition-colors shadow-lg shadow-blue-500/30 cursor-pointer"
               >
                 {loading ? 'Проверка дат...' : 'Подтвердить бронирование'}
               </button>

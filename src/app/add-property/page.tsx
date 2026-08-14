@@ -176,7 +176,7 @@ export default function AddPropertyPage() {
               <Waves className="w-6 h-6" />
             </div>
             <span className="font-extrabold text-xl tracking-tight text-slate-900">
-              Dag<span className="text-blue-600">Booking</span>
+              Райский<span className="text-blue-600">Пляж</span>
             </span>
           </Link>
 

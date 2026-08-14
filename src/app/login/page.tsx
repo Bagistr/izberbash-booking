@@ -55,7 +55,7 @@ export default function LoginPage() {
             <Waves className="w-6 h-6" />
           </div>
           <span className="font-extrabold text-2xl tracking-tight text-slate-900">
-            Dag<span className="text-blue-600">Booking</span>
+            Райский<span className="text-blue-600">Пляж</span>
           </span>
         </Link>
         <h2 className="text-2xl font-black text-slate-900">

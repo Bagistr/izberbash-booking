@@ -5,7 +5,10 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Property } from '@/types/property';
 import { BookingModal } from '@/components/BookingModal';
-import { Waves, ArrowLeft, MapPin, Users, Check, ShieldCheck } from 'lucide-react';
+import {
+  Waves, ArrowLeft, MapPin, Users, Check, ShieldCheck,
+  Maximize2, X, ChevronLeft, ChevronRight
+} from 'lucide-react';
 
 export default function PropertyDetailPage() {
   const params = useParams();
@@ -14,6 +17,9 @@ export default function PropertyDetailPage() {
   const [property, setProperty] = useState<Property | null>(null);
   const [loading, setLoading] = useState(true);
   const [isBookingOpen, setIsBookingOpen] = useState(false);
+
+  // Состояние полноэкранного просмотра фото
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -61,17 +67,31 @@ export default function PropertyDetailPage() {
       ? property.photos
       : ['https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=1000&q=80'];
 
+  const prevPhoto = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (lightboxIndex !== null) {
+      setLightboxIndex(lightboxIndex === 0 ? photos.length - 1 : lightboxIndex - 1);
+    }
+  };
+
+  const nextPhoto = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (lightboxIndex !== null) {
+      setLightboxIndex(lightboxIndex === photos.length - 1 ? 0 : lightboxIndex + 1);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 pb-16">
-      {/* Хедер */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
+      {/* Шапка */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center space-x-2">
             <div className="bg-blue-600 p-2 rounded-xl text-white">
               <Waves className="w-6 h-6" />
             </div>
             <span className="font-extrabold text-xl tracking-tight text-slate-900">
-              Dag<span className="text-blue-600">Booking</span>
+              Райский<span className="text-blue-600">Пляж</span>
             </span>
           </Link>
 
@@ -96,15 +116,31 @@ export default function PropertyDetailPage() {
           </div>
         </div>
 
-        {/* Галерея фотографий */}
+        {/* Галерея кликабельных фотографий с зумом */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
-          <div className="md:col-span-2 h-[350px] sm:h-[450px] rounded-3xl overflow-hidden border border-slate-200 shadow-sm">
-            <img src={photos[0]} alt={property.title} className="w-full h-full object-cover" />
+          <div
+            onClick={() => setLightboxIndex(0)}
+            className="md:col-span-2 h-[350px] sm:h-[450px] rounded-3xl overflow-hidden border border-slate-200 shadow-sm relative group cursor-pointer"
+          >
+            <img src={photos[0]} alt={property.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+            <div className="absolute inset-0 bg-slate-900/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-sm space-x-2 backdrop-blur-[2px]">
+              <Maximize2 className="w-5 h-5" />
+              <span>Нажмите для увеличения</span>
+            </div>
           </div>
+
           <div className="grid grid-cols-2 md:grid-cols-1 gap-4 h-[350px] sm:h-[450px]">
             {photos.slice(1, 3).map((photo, index) => (
-              <div key={index} className="h-full rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
-                <img src={photo} alt={`${property.title} - ${index + 2}`} className="w-full h-full object-cover" />
+              <div
+                key={index}
+                onClick={() => setLightboxIndex(index + 1)}
+                className="h-full rounded-2xl overflow-hidden border border-slate-200 shadow-sm relative group cursor-pointer"
+              >
+                <img src={photo} alt={`${property.title} - ${index + 2}`} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                <div className="absolute inset-0 bg-slate-900/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-xs space-x-1 backdrop-blur-[2px]">
+                  <Maximize2 className="w-4 h-4" />
+                  <span>Увеличить</span>
+                </div>
               </div>
             ))}
           </div>
@@ -161,7 +197,7 @@ export default function PropertyDetailPage() {
 
               <button
                 onClick={() => setIsBookingOpen(true)}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-4 rounded-2xl transition-colors shadow-lg shadow-blue-500/25 flex items-center justify-center space-x-2"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-4 rounded-2xl transition-colors shadow-lg shadow-blue-500/25 flex items-center justify-center space-x-2 cursor-pointer"
               >
                 <span>Забронировать онлайн</span>
               </button>
@@ -170,7 +206,54 @@ export default function PropertyDetailPage() {
         </div>
       </div>
 
-      {/* Модальное окно бронирования с проверкой дат */}
+      {/* ПОЛНОЭКРАННЫЙ ПРОСМОТР ФОТО (LIGHTBOX) */}
+      {lightboxIndex !== null && (
+        <div
+          onClick={() => setLightboxIndex(null)}
+          className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex items-center justify-center p-4 sm:p-8 select-none"
+        >
+          <button
+            onClick={() => setLightboxIndex(null)}
+            className="absolute top-5 right-5 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 p-2 rounded-full transition-colors z-10 cursor-pointer"
+          >
+            <X className="w-6 h-6" />
+          </button>
+
+          <div className="absolute top-6 left-6 text-white/80 font-bold text-sm bg-black/50 px-3 py-1.5 rounded-full border border-white/10">
+            {lightboxIndex + 1} / {photos.length}
+          </div>
+
+          {photos.length > 1 && (
+            <>
+              <button
+                onClick={prevPhoto}
+                className="absolute left-4 sm:left-8 top-1/2 -translate-y-1/2 text-white bg-white/10 hover:bg-white/25 p-3 rounded-full transition-colors z-10 cursor-pointer"
+              >
+                <ChevronLeft className="w-6 h-6" />
+              </button>
+              <button
+                onClick={nextPhoto}
+                className="absolute right-4 sm:right-8 top-1/2 -translate-y-1/2 text-white bg-white/10 hover:bg-white/25 p-3 rounded-full transition-colors z-10 cursor-pointer"
+              >
+                <ChevronRight className="w-6 h-6" />
+              </button>
+            </>
+          )}
+
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-5xl max-h-[85vh] flex items-center justify-center"
+          >
+            <img
+              src={photos[lightboxIndex]}
+              alt={`Фото ${lightboxIndex + 1}`}
+              className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Модалка бронирования */}
       {isBookingOpen && (
         <BookingModal
           property={property}
