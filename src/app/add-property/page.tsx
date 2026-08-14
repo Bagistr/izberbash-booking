@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { Waves, ArrowLeft, Building2, X, CheckCircle2, ImagePlus, Plus, Home, Trash2 } from 'lucide-react';
+import { Waves, ArrowLeft, Building2, X, CheckCircle2, ImagePlus, Plus, Home, Trash2, Layers, Check } from 'lucide-react';
 
 const PRESET_AMENITIES = [
   'Wi-Fi', 'Кондиционер', 'Мангал', 'Бассейн', 'Беседка', 
@@ -11,6 +11,9 @@ const PRESET_AMENITIES = [
 ];
 
 export default function AddPropertyPage() {
+  // Выбор формата: 'single' (один отдельный дом) или 'complex' (база отдыха / гостиница с номерами)
+  const [listingFormat, setListingFormat] = useState<'single' | 'complex'>('single');
+
   const [formData, setFormData] = useState({
     title: '',
     property_type: 'house',
@@ -22,7 +25,7 @@ export default function AddPropertyPage() {
     landlord_phone: '',
   });
 
-  // Список домиков/номеров в этом объявлении
+  // Список домиков/номеров (используется только для формата 'complex')
   const [units, setUnits] = useState<string[]>(['Домик №1', 'Домик №2']);
   const [newUnitName, setNewUnitName] = useState('');
 
@@ -61,7 +64,7 @@ export default function AddPropertyPage() {
     setCustomAmenity('');
   };
 
-  // Управление домиками/номерами
+  // Управление домиками/номерами для комплекса
   const addUnit = () => {
     if (newUnitName.trim()) {
       setUnits((prev) => [...prev, newUnitName.trim()]);
@@ -73,7 +76,7 @@ export default function AddPropertyPage() {
 
   const removeUnit = (index: number) => {
     if (units.length <= 1) {
-      setErrorMsg('В объекте должен быть хотя бы один домик/номер.');
+      setErrorMsg('В комплексе должен быть указан хотя бы один домик или номер.');
       return;
     }
     setUnits((prev) => prev.filter((_, idx) => idx !== index));
@@ -137,6 +140,9 @@ export default function AddPropertyPage() {
       return;
     }
 
+    // Если одиночный объект — передаем 1 дефолтный юнит, если комплекс — массив выбранных юнитов
+    const finalUnits = listingFormat === 'single' ? ['Основной объект'] : units;
+
     try {
       const res = await fetch('/api/properties', {
         method: 'POST',
@@ -145,7 +151,7 @@ export default function AddPropertyPage() {
           ...formData,
           amenities: selectedAmenities,
           photos,
-          units,
+          units: finalUnits,
         }),
       });
 
@@ -186,7 +192,7 @@ export default function AddPropertyPage() {
             <div className="text-center py-8 space-y-4">
               <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto" />
               <h2 className="text-2xl font-black text-slate-900">Объект успешно добавлен!</h2>
-              <p className="text-slate-600 text-sm">Ваш комплекс и все домики опубликованы в каталоге.</p>
+              <p className="text-slate-600 text-sm">Ваше объявление опубликовано в каталоге DagBooking.</p>
               <Link href="/" className="inline-block bg-blue-600 text-white font-bold py-3 px-8 rounded-xl hover:bg-blue-700 transition-colors">
                 Посмотреть в каталоге
               </Link>
@@ -199,6 +205,7 @@ export default function AddPropertyPage() {
                   <span>Партнерам и владельцам</span>
                 </div>
                 <h1 className="text-3xl font-black text-slate-900">Сдать жилье</h1>
+                <p className="text-xs text-slate-500 mt-1">Заполните параметры вашего объекта для публикации</p>
               </div>
 
               {errorMsg && (
@@ -206,68 +213,131 @@ export default function AddPropertyPage() {
               )}
 
               <form onSubmit={handleSubmit} className="space-y-6">
+                {/* 1. ПЕРЕКЛЮЧАТЕЛЬ: ОДИН ОБЪЕКТ ИЛИ КОМПЛЕКС */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Название комплекса / базы *</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-2">
+                    Что вы сдаете? *
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setListingFormat('single');
+                        setFormData((prev) => ({ ...prev, property_type: 'house' }));
+                      }}
+                      className={`p-4 rounded-2xl border text-left transition-all flex flex-col justify-between ${
+                        listingFormat === 'single'
+                          ? 'border-blue-600 bg-blue-50/60 ring-2 ring-blue-500/20'
+                          : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className={`p-2 rounded-xl ${listingFormat === 'single' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 shadow-sm'}`}>
+                          <Home className="w-5 h-5" />
+                        </div>
+                        {listingFormat === 'single' && <Check className="w-4 h-4 text-blue-600 font-bold" />}
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900">Отдельный дом / коттедж</h4>
+                        <p className="text-[11px] text-slate-500 mt-0.5">Один объект целиком под одного арендатора</p>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setListingFormat('complex');
+                        setFormData((prev) => ({ ...prev, property_type: 'house' }));
+                      }}
+                      className={`p-4 rounded-2xl border text-left transition-all flex flex-col justify-between ${
+                        listingFormat === 'complex'
+                          ? 'border-blue-600 bg-blue-50/60 ring-2 ring-blue-500/20'
+                          : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className={`p-2 rounded-xl ${listingFormat === 'complex' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 shadow-sm'}`}>
+                          <Layers className="w-5 h-5" />
+                        </div>
+                        {listingFormat === 'complex' && <Check className="w-4 h-4 text-blue-600 font-bold" />}
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900">Комплекс / База / Отель</h4>
+                        <p className="text-[11px] text-slate-500 mt-0.5">Несколько одинаковых номеров или домиков</p>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Название */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-2">
+                    {listingFormat === 'single' ? 'Название объекта *' : 'Название базы / комплекса *'}
+                  </label>
                   <input
                     type="text"
                     name="title"
                     required
-                    placeholder="Пример: Коттеджный комплекс «Каспийский бриз»"
+                    placeholder={
+                      listingFormat === 'single'
+                        ? 'Пример: Уютный коттедж у моря с мангалом'
+                        : 'Пример: База отдыха «Каспийский берег»'
+                    }
                     value={formData.title}
                     onChange={handleChange}
                     className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
-                {/* БЛОК: ДОМИКИ / НОМЕРА В КОМПЛЕКСЕ */}
-                <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl space-y-3">
-                  <div className="flex items-center justify-between">
+                {/* БЛОК ДОМИКОВ/НОМЕРОВ (ПОКАЗЫВАЕТСЯ ТОЛЬКО ПРИ ВЫБОРЕ КОМПЛЕКСА) */}
+                {listingFormat === 'complex' && (
+                  <div className="p-4 bg-blue-50/60 border border-blue-100 rounded-2xl space-y-3">
                     <div className="flex items-center space-x-2">
-                      <Home className="w-4 h-4 text-blue-600" />
+                      <Layers className="w-4 h-4 text-blue-600" />
                       <label className="text-xs font-bold text-slate-800 uppercase">
-                        Домики / Номера в этом объекте ({units.length})
+                        Домики / Номера в этом комплексе ({units.length})
                       </label>
                     </div>
-                  </div>
-                  <p className="text-[11px] text-slate-500 leading-normal">
-                    Если у вас несколько одинаковых домиков или номеров, добавьте их сюда. На каждый будет вестись свой отдельный календарь броней.
-                  </p>
+                    <p className="text-[11px] text-slate-500 leading-normal">
+                      Добавьте сюда названия всех ваших домиков или комнат. У каждого будет вестись свой независимый календарь заездов.
+                    </p>
 
-                  <div className="space-y-2">
-                    {units.map((u, idx) => (
-                      <div key={idx} className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold">
-                        <span className="text-slate-800">{u}</span>
-                        {units.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeUnit(idx)}
-                            className="text-slate-400 hover:text-red-600 p-1"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                    <div className="space-y-2">
+                      {units.map((u, idx) => (
+                        <div key={idx} className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold">
+                          <span className="text-slate-800">{u}</span>
+                          {units.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeUnit(idx)}
+                              className="text-slate-400 hover:text-red-600 p-1 transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
 
-                  <div className="flex gap-2 pt-1">
-                    <input
-                      type="text"
-                      placeholder="Название нового домика (напр. Коттедж №3)"
-                      value={newUnitName}
-                      onChange={(e) => setNewUnitName(e.target.value)}
-                      className="flex-1 text-xs bg-white border border-slate-200 rounded-xl px-3 py-2"
-                    />
-                    <button
-                      type="button"
-                      onClick={addUnit}
-                      className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-2 rounded-xl flex items-center space-x-1"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Добавить</span>
-                    </button>
+                    <div className="flex gap-2 pt-1">
+                      <input
+                        type="text"
+                        placeholder="Название (напр. Коттедж №3 или Номер 102)"
+                        value={newUnitName}
+                        onChange={(e) => setNewUnitName(e.target.value)}
+                        className="flex-1 text-xs bg-white border border-slate-200 rounded-xl px-3 py-2"
+                      />
+                      <button
+                        type="button"
+                        onClick={addUnit}
+                        className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center space-x-1 transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Добавить</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
@@ -278,13 +348,15 @@ export default function AddPropertyPage() {
                       onChange={handleChange}
                       className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="house">Дом / Коттедж</option>
+                      <option value="house">Дом / Коттедж / Дача</option>
                       <option value="room">Номер в отеле / Гостевой дом</option>
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Цена за 1 домик в сутки (₽) *</label>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">
+                      {listingFormat === 'single' ? 'Цена за сутки (₽) *' : 'Цена за 1 домик/номер в сутки (₽) *'}
+                    </label>
                     <input
                       type="number"
                       name="price_per_night"
@@ -292,7 +364,7 @@ export default function AddPropertyPage() {
                       placeholder="5000"
                       value={formData.price_per_night}
                       onChange={handleChange}
-                      className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500"
+                      className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 font-bold text-blue-600"
                     />
                   </div>
                 </div>
@@ -312,7 +384,9 @@ export default function AddPropertyPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Вместимость 1 домика (гостей)</label>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">
+                      {listingFormat === 'single' ? 'Макс. гостей' : 'Вместимость 1 домика/номера'}
+                    </label>
                     <input
                       type="number"
                       name="max_guests"
@@ -351,7 +425,7 @@ export default function AddPropertyPage() {
                   />
                 </div>
 
-                {/* БОНУСЫ */}
+                {/* БОНУСЫ И УДОБСТВА */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-2">
                     Бонусы и удобства
@@ -401,7 +475,7 @@ export default function AddPropertyPage() {
                   </div>
                 </div>
 
-                {/* ФОТО */}
+                {/* ФОТОГРАФИИ */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Фотографии *</label>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-2">
@@ -441,9 +515,9 @@ export default function AddPropertyPage() {
                 <button
                   type="submit"
                   disabled={loading || uploading}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm py-4 rounded-2xl transition-colors shadow-lg shadow-blue-500/25"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm py-4 rounded-2xl transition-colors shadow-lg shadow-blue-500/25 cursor-pointer"
                 >
-                  {loading ? 'Публикация...' : 'Опубликовать комплекс'}
+                  {loading ? 'Публикация...' : 'Опубликовать объект'}
                 </button>
               </form>
             </div>
