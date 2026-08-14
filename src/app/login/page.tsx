@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Waves, ArrowLeft, Lock, Phone, User, ShieldCheck } from 'lucide-react';
+import { Waves, ArrowLeft, Lock, Phone, User, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -11,12 +11,40 @@ export default function LoginPage() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Сохраняем имя арендодателя для сессии
-    localStorage.setItem('landlord_user', JSON.stringify({ name: name || 'Арендодатель', phone }));
-    router.push('/dashboard');
+    setLoading(true);
+    setErrorMsg('');
+
+    try {
+      const res = await fetch('/api/auth/landlord', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: isRegister ? 'register' : 'login',
+          name,
+          phone,
+          password,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Ошибка входа');
+      }
+
+      // Сохраняем сессию пользователя в браузере
+      localStorage.setItem('landlord_user', JSON.stringify(data.user));
+      router.push('/dashboard');
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Произошла ошибка при авторизации');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -40,6 +68,13 @@ export default function LoginPage() {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4">
         <div className="bg-white py-8 px-6 sm:px-10 rounded-3xl shadow-sm border border-slate-200">
+          {errorMsg && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 text-xs font-semibold rounded-xl flex items-center space-x-2">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
           <form className="space-y-4" onSubmit={handleSubmit}>
             {isRegister && (
               <div>
@@ -90,15 +125,19 @@ export default function LoginPage() {
 
             <button
               type="submit"
+              disabled={loading}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-3.5 rounded-xl transition-colors shadow-lg shadow-blue-500/25 mt-2"
             >
-              {isRegister ? 'Зарегистрироваться' : 'Войти в кабинет'}
+              {loading ? 'Проверка...' : isRegister ? 'Зарегистрироваться' : 'Войти в кабинет'}
             </button>
           </form>
 
           <div className="mt-6 pt-6 border-t border-slate-100 text-center">
             <button
-              onClick={() => setIsRegister(!isRegister)}
+              onClick={() => {
+                setIsRegister(!isRegister);
+                setErrorMsg('');
+              }}
               className="text-xs text-blue-600 font-bold hover:underline"
             >
               {isRegister ? 'Уже есть аккаунт? Войти' : 'Нет аккаунта? Зарегистрироваться'}
