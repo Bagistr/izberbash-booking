@@ -2,9 +2,8 @@ import Link from 'next/link';
 import { sql } from '@/lib/db';
 import { Property } from '@/types/property';
 import { PropertyList } from '@/components/PropertyList';
-import { Waves, ShieldCheck, MapPin, Sparkles } from 'lucide-react';
+import { Waves, ShieldCheck, MapPin, Sparkles, LayoutDashboard } from 'lucide-react';
 
-// Принудительно отключаем кэш, чтобы новые объявления из базы подгружались сразу
 export const dynamic = 'force-dynamic';
 
 async function getProperties(): Promise<Property[]> {
@@ -22,24 +21,35 @@ export default async function HomePage() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
-      {/* Шапка */}
+      {/* Шапка с кнопками кабинета */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
+          <Link href="/" className="flex items-center space-x-2">
             <div className="bg-blue-600 p-2 rounded-xl text-white">
               <Waves className="w-6 h-6" />
             </div>
             <span className="font-extrabold text-xl tracking-tight text-slate-900">
               Избербаш<span className="text-blue-600">Море</span>
             </span>
-          </div>
-
-          <Link
-            href="/add-property"
-            className="bg-slate-900 text-white font-medium text-sm px-4 py-2 rounded-xl hover:bg-slate-800 transition-colors inline-block"
-          >
-            Сдать жилье
           </Link>
+
+          {/* Кнопки для арендодателей */}
+          <div className="flex items-center space-x-3">
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-700 hover:text-blue-600 bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-xl transition-all"
+            >
+              <LayoutDashboard className="w-4 h-4 text-blue-600" />
+              <span>Кабинет владельца</span>
+            </Link>
+
+            <Link
+              href="/add-property"
+              className="bg-blue-600 text-white font-bold text-xs px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors inline-block shadow-sm shadow-blue-500/20"
+            >
+              Сдать жилье
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -62,7 +72,7 @@ export default async function HomePage() {
               <ShieldCheck className="w-8 h-8 text-blue-400 flex-shrink-0" />
               <div>
                 <p className="font-bold text-sm">Проверенное жилье</p>
-                <p className="text-xs text-blue-200">Реальные фото и контакты</p>
+                <p className="text-xs text-blue-200">Реальные фото и бронь</p>
               </div>
             </div>
             <div className="flex items-center space-x-3 bg-white/10 backdrop-blur-md p-3.5 rounded-2xl border border-white/10">
@@ -75,18 +85,18 @@ export default async function HomePage() {
             <div className="flex items-center space-x-3 bg-white/10 backdrop-blur-md p-3.5 rounded-2xl border border-white/10">
               <Waves className="w-8 h-8 text-blue-400 flex-shrink-0" />
               <div>
-                <p className="font-bold text-sm">Без переплат</p>
-                <p className="text-xs text-blue-200">Прямые цены от хозяев</p>
+                <p className="font-bold text-sm">Гарантия дат</p>
+                <p className="text-xs text-blue-200">Без двойных бронирований</p>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Каталог объектов */}
+      {/* Каталог объектов и фильтры */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <h2 className="text-2xl font-bold text-slate-900 mb-6">
-          Доступные объекты в Избербаше ({properties.length})
+          Каталог жилья ({properties.length})
         </h2>
 
         <PropertyList properties={properties} />
