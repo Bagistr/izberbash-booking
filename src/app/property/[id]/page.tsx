@@ -1,31 +1,59 @@
-import React from 'react';
+'use client';
+
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
-import { sql } from '@/lib/db';
+import { useParams } from 'next/navigation';
 import { Property } from '@/types/property';
-import { Waves, ArrowLeft, MapPin, Users, Check, Phone, ShieldCheck } from 'lucide-react';
+import { BookingModal } from '@/components/BookingModal';
+import { Waves, ArrowLeft, MapPin, Users, Check, ShieldCheck } from 'lucide-react';
 
-async function getProperty(id: string): Promise<Property | null> {
-  try {
-    const rows = await sql`SELECT * FROM properties WHERE id = ${id}`;
-    if (!rows || rows.length === 0) return null;
-    return rows[0] as Property;
-  } catch (err) {
-    console.error('Ошибка получения объекта из Neon:', err);
-    return null;
+export default function PropertyDetailPage() {
+  const params = useParams();
+  const id = params?.id as string;
+
+  const [property, setProperty] = useState<Property | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isBookingOpen, setIsBookingOpen] = useState(false);
+
+  useEffect(() => {
+    if (!id) return;
+
+    async function loadProperty() {
+      try {
+        const res = await fetch(`/api/properties`);
+        if (res.ok) {
+          const list: Property[] = await res.json();
+          const found = list.find((p) => String(p.id) === String(id));
+          setProperty(found || null);
+        }
+      } catch (err) {
+        console.error('Ошибка загрузки данных объекта:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadProperty();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <p className="text-sm font-semibold text-slate-500 animate-pulse">Загрузка информации об объекте...</p>
+      </div>
+    );
   }
-}
-
-export default async function PropertyDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  const property = await getProperty(id);
 
   if (!property) {
-    notFound();
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+        <h1 className="text-2xl font-bold text-slate-800 mb-2">Объект не найден</h1>
+        <p className="text-sm text-slate-500 mb-4">Возможно, объявление было удалено или перемещено.</p>
+        <Link href="/" className="bg-blue-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl">
+          Вернуться в каталог
+        </Link>
+      </div>
+    );
   }
 
   const photos =
@@ -82,7 +110,7 @@ export default async function PropertyDetailPage({
           </div>
         </div>
 
-        {/* Подробности */}
+        {/* Основная информация */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-8">
             <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm">
@@ -112,6 +140,7 @@ export default async function PropertyDetailPage({
             </div>
           </div>
 
+          {/* Карточка бронирования */}
           <div>
             <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-lg sticky top-24 space-y-6">
               <div>
@@ -140,6 +169,14 @@ export default async function PropertyDetailPage({
           </div>
         </div>
       </div>
+
+      {/* Модальное окно бронирования с проверкой дат */}
+      {isBookingOpen && (
+        <BookingModal
+          property={property}
+          onClose={() => setIsBookingOpen(false)}
+        />
+      )}
     </main>
   );
 }
