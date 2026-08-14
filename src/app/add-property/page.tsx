@@ -42,30 +42,15 @@ export default function AddPropertyPage() {
     );
   };
 
-  {/* Добавление своего бонуса */}
-  <div className="flex gap-2 mt-2">
-    <input
-      type="text"
-      placeholder="Например: Сапборды / Джакузи"
-      value={customAmenity}
-      onChange={(e) => setCustomAmenity(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          addCustomAmenity();
-        }
-      }}
-      className="flex-1 text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-    />
-    <button
-      type="button"
-      onClick={addCustomAmenity}
-      className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center space-x-1 transition-colors cursor-pointer"
-    >
-      <Plus className="w-3.5 h-3.5" />
-      <span>Добавить</span>
-    </button>
-  </div>
+  // Правильная функция добавления бонуса (находится внутри компонента)
+  const addCustomAmenity = (e?: React.MouseEvent | React.KeyboardEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = customAmenity.trim();
+    if (trimmed && !selectedAmenities.includes(trimmed)) {
+      setSelectedAmenities((prev) => [...prev, trimmed]);
+      setCustomAmenity('');
+    }
+  };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -183,7 +168,7 @@ export default function AddPropertyPage() {
                   <Building2 className="w-3.5 h-3.5" />
                   <span>Партнерам и владельцам</span>
                 </div>
-                <h1 className="text-3xl font-black text-slate-900">Сдать жилье в Избербаше</h1>
+                <h1 className="text-3xl font-black text-slate-900">Сдать жилье</h1>
               </div>
 
               {errorMsg && (
@@ -312,20 +297,27 @@ export default function AddPropertyPage() {
                   </div>
 
                   {/* Свои бонусы */}
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 mt-2">
                     <input
                       type="text"
-                      placeholder="Добавить свой бонус (напр. Джакузи)"
+                      placeholder="Например: Сапборды / Джакузи"
                       value={customAmenity}
                       onChange={(e) => setCustomAmenity(e.target.value)}
-                      className="flex-1 text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          addCustomAmenity();
+                        }
+                      }}
+                      className="flex-1 text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     />
                     <button
                       type="button"
                       onClick={addCustomAmenity}
-                      className="bg-slate-800 text-white text-xs font-bold px-3 py-2 rounded-xl"
+                      className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center space-x-1 transition-colors cursor-pointer"
                     >
-                      <Plus className="w-4 h-4" />
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Добавить</span>
                     </button>
                   </div>
                 </div>
