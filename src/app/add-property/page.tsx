@@ -42,12 +42,30 @@ export default function AddPropertyPage() {
     );
   };
 
-  const addCustomAmenity = () => {
-    if (customAmenity.trim() && !selectedAmenities.includes(customAmenity.trim())) {
-      setSelectedAmenities((prev) => [...prev, customAmenity.trim()]);
-      setCustomAmenity('');
-    }
-  };
+  {/* Добавление своего бонуса */}
+  <div className="flex gap-2 mt-2">
+    <input
+      type="text"
+      placeholder="Например: Сапборды / Джакузи"
+      value={customAmenity}
+      onChange={(e) => setCustomAmenity(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          addCustomAmenity();
+        }
+      }}
+      className="flex-1 text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+    />
+    <button
+      type="button"
+      onClick={addCustomAmenity}
+      className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center space-x-1 transition-colors cursor-pointer"
+    >
+      <Plus className="w-3.5 h-3.5" />
+      <span>Добавить</span>
+    </button>
+  </div>
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -137,7 +155,7 @@ export default function AddPropertyPage() {
               <Waves className="w-6 h-6" />
             </div>
             <span className="font-extrabold text-xl tracking-tight text-slate-900">
-              Избербаш<span className="text-blue-600">Море</span>
+              Dag<span className="text-blue-600">Booking</span>
             </span>
           </Link>
 

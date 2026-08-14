@@ -71,7 +71,7 @@ export default function PropertyDetailPage() {
               <Waves className="w-6 h-6" />
             </div>
             <span className="font-extrabold text-xl tracking-tight text-slate-900">
-              Избербаш<span className="text-blue-600">Море</span>
+              Dag<span className="text-blue-600">Booking</span>
             </span>
           </Link>
 
