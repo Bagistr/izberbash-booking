@@ -2,6 +2,18 @@ import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { sql } from '@/lib/db';
 
+// Метод получения всех объектов (теперь страница детального просмотра сможет их найти)
+export async function GET() {
+  try {
+    const rows = await sql`SELECT * FROM properties WHERE is_active = true ORDER BY created_at DESC`;
+    return NextResponse.json(rows);
+  } catch (error) {
+    console.error('Ошибка получения списка объектов:', error);
+    return NextResponse.json({ error: 'Ошибка сервера' }, { status: 500 });
+  }
+}
+
+// Метод создания нового объекта
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -53,7 +65,6 @@ export async function POST(request: Request) {
       )
     `;
 
-    // Принудительно очищаем кэш главной страницы
     revalidatePath('/');
 
     return NextResponse.json({ success: true });
