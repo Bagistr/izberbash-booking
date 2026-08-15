@@ -343,7 +343,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <p className="text-2xl font-black text-slate-900">{stats.netRevenue.toLocaleString('ru-RU')} ₽</p>
-            <p className="text-[11px] text-emerald-600 font-bold">После вычета комиссии 10%</p>
+            <p className="text-[11px] text-emerald-600 font-bold">После вычета комиссии 7%</p>
           </div>
 
           <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-2">
