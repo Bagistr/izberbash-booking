@@ -69,7 +69,7 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
     const conflictingBookings = propBookings.filter((b) => {
       const bIn = b.check_in.slice(0, 10);
       const bOut = b.check_out.slice(0, 10);
-      return bIn < outStr && bOut > inDateStr;
+      return bIn < outDateStr && bOut > inDateStr;
     });
 
     if (property.units && property.units.length > 0) {
