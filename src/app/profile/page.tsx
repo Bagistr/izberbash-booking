@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Waves, LogOut, Calendar, MapPin, Phone, Heart, Compass, User, ArrowLeft } from 'lucide-react';
+import { Waves, LogOut, Calendar, MapPin, Phone, Heart, Compass, ArrowLeft } from 'lucide-react';
 import { PropertyCard } from '@/components/PropertyCard';
 import { Property } from '@/types/property';
+import { useAuth } from '@/context/AuthContext';
 import { useFavorites } from '@/context/FavoritesContext';
 
 interface BookingRecord {
@@ -22,14 +23,36 @@ interface BookingRecord {
 
 export default function GuestProfilePage() {
   const router = useRouter();
+  const { user, logout, isLoading } = useAuth();
   const { favorites } = useFavorites();
-  const [user, setUser] = useState<{ id?: string; name: string; phone: string; role: string } | null>(null);
+
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [favoriteProperties, setFavoriteProperties] = useState<Property[]>([]);
   const [activeTab, setActiveTab] = useState<'bookings' | 'favorites'>('bookings');
-  const [loading, setLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(true);
 
-  const { user, logout, isLoading } = useAuth();
+  const loadProfileData = useCallback(async (phone: string) => {
+    try {
+      const [propsRes, bookingsRes] = await Promise.all([
+        fetch('/api/properties'),
+        fetch(`/api/guest/bookings?phone=${encodeURIComponent(phone)}`),
+      ]);
+
+      if (propsRes.ok) {
+        const allProps: Property[] = await propsRes.json();
+        setFavoriteProperties(allProps.filter((p) => favorites.includes(p.id)));
+      }
+
+      if (bookingsRes.ok) {
+        const data = await bookingsRes.json();
+        setBookings(data || []);
+      }
+    } catch (e) {
+      console.error('Ошибка загрузки профиля:', e);
+    } finally {
+      setDataLoading(false);
+    }
+  }, [favorites]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -44,46 +67,15 @@ export default function GuestProfilePage() {
       return;
     }
 
-    loadProfileData();
-  }, [user, isLoading, router, favorites]);
-
-    const parsed = JSON.parse(stored);
-    setUser(parsed);
-
-    // Загружаем бронирования и объекты
-    async function loadProfileData() {
-      try {
-        const [propsRes, bookingsRes] = await Promise.all([
-          fetch('/api/properties'),
-          fetch(`/api/guest/bookings?phone=${encodeURIComponent(parsed.phone)}`),
-        ]);
-
-        if (propsRes.ok) {
-          const allProps: Property[] = await propsRes.json();
-          setFavoriteProperties(allProps.filter((p) => favorites.includes(p.id)));
-        }
-
-        if (bookingsRes.ok) {
-          const data = await bookingsRes.json();
-          setBookings(data || []);
-        }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadProfileData();
-  }, [router, favorites]);
+    loadProfileData(user.phone);
+  }, [user, isLoading, router, loadProfileData]);
 
   const handleLogout = () => {
-    localStorage.removeItem('rp_user');
-    localStorage.removeItem('landlord_user');
+    logout();
     router.push('/login');
   };
 
-  if (loading) {
+  if (isLoading || dataLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <p className="text-sm font-semibold text-slate-500 animate-pulse">Загрузка профиля...</p>
@@ -105,8 +97,8 @@ export default function GuestProfilePage() {
           </Link>
 
           <div className="flex items-center space-x-3">
-            <Link href="/" className="text-xs font-bold text-slate-600 hover:text-blue-600 mr-2">
-              В каталог
+            <Link href="/" className="text-xs font-bold text-slate-600 hover:text-blue-600 mr-2 flex items-center">
+              <ArrowLeft className="w-3.5 h-3.5 mr-1" /> В каталог
             </Link>
             <button
               onClick={handleLogout}
@@ -120,7 +112,7 @@ export default function GuestProfilePage() {
       </header>
 
       <div className="max-w-5xl mx-auto px-4 pt-8 space-y-6">
-        {/* Карточка пользователя */}
+        {/* Карточка туриста */}
         <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center space-x-4">
             <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-xl">
@@ -128,7 +120,7 @@ export default function GuestProfilePage() {
             </div>
             <div>
               <h1 className="text-xl sm:text-2xl font-black text-slate-900">{user?.name}</h1>
-              <p className="text-xs text-slate-500">{user?.phone} • Аккаунт туриста</p>
+              <p className="text-xs text-slate-500">{user?.phone} • Личный кабинет туриста</p>
             </div>
           </div>
 
@@ -154,7 +146,7 @@ export default function GuestProfilePage() {
           </div>
         </div>
 
-        {/* ТАБ 1: МОИ ПОЕЗДКИ */}
+        {/* ВКЛАДКА: МОИ ПОЕЗДКИ */}
         {activeTab === 'bookings' && (
           <div className="space-y-4">
             <h2 className="text-lg font-bold text-slate-900">История бронирований</h2>
@@ -162,13 +154,13 @@ export default function GuestProfilePage() {
             {bookings.length === 0 ? (
               <div className="bg-white p-12 text-center rounded-3xl border border-slate-200 space-y-3">
                 <Compass className="w-12 h-12 text-slate-300 mx-auto" />
-                <p className="text-slate-700 font-bold text-sm">У вас пока нет активных бронирований</p>
+                <p className="text-slate-700 font-bold text-sm">У вас пока нет активных поездок</p>
                 <p className="text-xs text-slate-400">Выберите подходящий домик в каталоге и забронируйте онлайн.</p>
                 <Link
                   href="/"
                   className="inline-block bg-blue-600 text-white font-bold text-xs px-5 py-2.5 rounded-xl hover:bg-blue-700 transition-colors"
                 >
-                  Перейти к выбору жилья
+                  Перейти в каталог
                 </Link>
               </div>
             ) : (
@@ -209,7 +201,7 @@ export default function GuestProfilePage() {
           </div>
         )}
 
-        {/* ТАБ 2: ИЗБРАННОЕ */}
+        {/* ВКЛАДКА: ИЗБРАННОЕ */}
         {activeTab === 'favorites' && (
           <div className="space-y-4">
             <h2 className="text-lg font-bold text-slate-900">Сохраненные варианты</h2>

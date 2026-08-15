@@ -1,16 +1,15 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import {
   Waves, DollarSign, TrendingUp, Users, Calendar as CalendarIcon,
   Plus, LogOut, Edit3, Eye, EyeOff, ChevronLeft, ChevronRight,
-  X, Check, MapPin, Building, Home, Phone, User, Lock, Unlock
+  X, Lock, Unlock
 } from 'lucide-react';
 import { Property } from '@/types/property';
-
 
 interface BookingItem {
   id: string;
@@ -24,13 +23,7 @@ interface BookingItem {
   check_out: string;
   total_days: number;
   total_price: number;
-  status: string; // 'confirmed', 'new', 'blocked'
-}
-
-interface Unit {
-  id: string;
-  property_id: string;
-  name: string;
+  status: string;
 }
 
 const PRESET_AMENITIES = [
@@ -48,9 +41,9 @@ const DAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [user, setUser] = useState<{ id?: string; name: string; phone: string } | null>(null);
+  const { user, logout, isLoading } = useAuth();
+
   const [properties, setProperties] = useState<Property[]>([]);
-  const [units, setUnits] = useState<Unit[]>([]);
   const [bookings, setBookings] = useState<BookingItem[]>([]);
   const [stats, setStats] = useState({
     totalRevenue: 0,
@@ -59,7 +52,7 @@ export default function DashboardPage() {
     totalGuests: 0,
     avgDays: '0',
   });
-  const [loading, setLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(true);
 
   // Календарь
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -84,7 +77,7 @@ export default function DashboardPage() {
   const [editFormData, setEditFormData] = useState<any>(null);
   const [savingEdit, setSavingEdit] = useState(false);
 
-  const loadData = async (phone: string) => {
+  const loadData = useCallback(async (phone: string) => {
     try {
       const res = await fetch(`/api/landlord/properties?phone=${encodeURIComponent(phone)}`);
       if (res.ok) {
@@ -93,19 +86,19 @@ export default function DashboardPage() {
         setBookings(data.bookings || []);
         if (data.stats) setStats(data.stats);
 
-        // Инициализируем выбранный объект для блокировки дат
-        if (data.properties && data.properties.length > 0 && !blockForm.property_id) {
-          setBlockForm((prev) => ({ ...prev, property_id: data.properties[0].id }));
+        if (data.properties && data.properties.length > 0) {
+          setBlockForm((prev) => ({
+            ...prev,
+            property_id: prev.property_id || data.properties[0].id,
+          }));
         }
       }
     } catch (err) {
-      console.error('Ошибка загрузки данных кабинета:', err);
+      console.error('Ошибка загрузки дашборда:', err);
     } finally {
-      setLoading(false);
+      setDataLoading(false);
     }
-  };
-
-  const { user, logout, isLoading } = useAuth();
+  }, []);
 
   useEffect(() => {
     if (isLoading) return;
@@ -116,20 +109,18 @@ export default function DashboardPage() {
     }
 
     if (user.role !== 'landlord') {
-      // Турист не должен быть в дашборде владельца
       router.push('/profile');
       return;
     }
 
     loadData(user.phone);
-  }, [user, isLoading, router]);
+  }, [user, isLoading, router, loadData]);
 
   const handleLogout = () => {
-    localStorage.removeItem('landlord_user');
+    logout();
     router.push('/login');
   };
 
-  // Переключение месяцев
   const prevMonth = () => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
   };
@@ -140,7 +131,6 @@ export default function DashboardPage() {
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
-
   const firstDayOfMonth = new Date(year, month, 1);
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   
@@ -160,7 +150,6 @@ export default function DashboardPage() {
     });
   };
 
-  // Сохранение ручной блокировки дат
   const handleSaveBlock = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingBlock(true);
@@ -185,7 +174,6 @@ export default function DashboardPage() {
     }
   };
 
-  // Снятие блокировки дат
   const handleUnlockBooking = async (bookingId: string) => {
     if (!confirm('Вы уверены, что хотите разблокировать эти даты?')) return;
 
@@ -263,17 +251,16 @@ export default function DashboardPage() {
     }
   };
 
-  if (loading) {
+  if (isLoading || dataLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <p className="text-sm font-semibold text-slate-500 animate-pulse">Загрузка кабинета...</p>
+        <p className="text-sm font-semibold text-slate-500 animate-pulse">Загрузка кабинета владельца...</p>
       </div>
     );
   }
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 pb-16">
-      {/* Шапка */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center space-x-2">
@@ -292,7 +279,7 @@ export default function DashboardPage() {
             <button
               onClick={handleLogout}
               className="p-2 text-slate-400 hover:text-red-600 rounded-xl hover:bg-slate-100 transition-colors"
-              title="Выйти из аккаунта"
+              title="Выйти"
             >
               <LogOut className="w-4 h-4" />
             </button>
@@ -375,7 +362,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 2. ШАХМАТКА ЗАНЯТОСТИ С РУЧНЫМИ БЛОКИРОВКАМИ */}
+        {/* 2. ШАХМАТКА ЗАНЯТОСТИ */}
         <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
             <div className="flex items-center space-x-3">
@@ -384,7 +371,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <h2 className="text-lg font-bold text-slate-900">Шахматка заселённости</h2>
-                <p className="text-xs text-slate-500">Синие плашки — брони с сайта, серые — ваши закрытые даты (Авито и др.)</p>
+                <p className="text-xs text-slate-500">Синие плашки — брони с сайта, серые — закрытые вами даты</p>
               </div>
             </div>
 
@@ -431,7 +418,6 @@ export default function DashboardPage() {
                 const formattedDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
                 const dayBookings = getBookingsForDate(formattedDate);
                 const isOccupied = dayBookings.length > 0;
-
                 const hasPlatformBooking = dayBookings.some((b) => b.status !== 'blocked');
 
                 return (
@@ -472,9 +458,6 @@ export default function DashboardPage() {
                             {b.status === 'blocked' ? `🔒 ${b.guest_name}` : b.guest_name}
                           </div>
                         ))}
-                        {dayBookings.length > 2 && (
-                          <span className="text-[9px] text-slate-600 font-bold">+{dayBookings.length - 2} еще</span>
-                        )}
                       </div>
                     )}
                   </div>
@@ -538,7 +521,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* МОДАЛЬНОЕ ОКНО: ЗАКРЫТИЕ СВОИХ ДАТ (АВИТО И ДР.) */}
+      {/* МОДАЛЬНОЕ ОКНО БЛОКИРОВКИ ДАТ */}
       {isBlockModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 relative shadow-2xl space-y-4">
@@ -551,7 +534,7 @@ export default function DashboardPage() {
                 <Lock className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Закрыть даты</h3>
+                <h3 className="text-lg font-bold text-slate-900">Закрыть свои даты</h3>
                 <p className="text-xs text-slate-500">Заблокирует даты для туристов на сайте</p>
               </div>
             </div>
@@ -615,7 +598,7 @@ export default function DashboardPage() {
               <button
                 type="submit"
                 disabled={savingBlock}
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs py-3.5 rounded-xl transition-colors mt-2"
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs py-3.5 rounded-xl transition-colors mt-2 cursor-pointer"
               >
                 {savingBlock ? 'Сохранение...' : 'Заблокировать выбранные дни'}
               </button>
@@ -624,7 +607,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* МОДАЛЬНОЕ ОКНО: ДЕТАЛИ БРОНИ И РАЗБЛОКИРОВКА */}
+      {/* ДЕТАЛИ БРОНИ И РАЗБЛОКИРОВКА */}
       {selectedDayBookings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 relative shadow-2xl space-y-4">
@@ -645,30 +628,18 @@ export default function DashboardPage() {
                     <div className="flex items-center justify-between">
                       <p className="font-bold text-sm text-slate-900">{b.property_title}</p>
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${isBlocked ? 'bg-slate-200 text-slate-700' : 'bg-blue-600 text-white'}`}>
-                        {isBlocked ? 'Своя блокировка' : 'DagBooking'}
+                        {isBlocked ? 'Своя блокировка' : 'Райский Пляж'}
                       </span>
                     </div>
 
                     <div className="text-xs text-slate-700 space-y-1">
-                      <div className="flex items-center">
-                        <User className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
-                        <span>{isBlocked ? 'Источник:' : 'Гость:'} <strong>{b.guest_name}</strong></span>
-                      </div>
+                      <p><span>{isBlocked ? 'Источник:' : 'Гость:'} <strong>{b.guest_name}</strong></span></p>
                       {!isBlocked && (
-                        <div className="flex items-center">
-                          <Phone className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
-                          <span>Телефон: <strong>{b.guest_phone}</strong></span>
-                        </div>
+                        <p><span>Телефон: <strong>{b.guest_phone}</strong></span></p>
                       )}
-                      <div className="flex items-center">
-                        <CalendarIcon className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
-                        <span>Даты: с {b.check_in.slice(0, 10)} по {b.check_out.slice(0, 10)} ({b.total_days} н.)</span>
-                      </div>
+                      <p><span>Даты: с {b.check_in.slice(0, 10)} по {b.check_out.slice(0, 10)} ({b.total_days} н.)</span></p>
                       {!isBlocked && (
-                        <div className="flex items-center">
-                          <DollarSign className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
-                          <span>Сумма: <strong>{b.total_price.toLocaleString('ru-RU')} ₽</strong></span>
-                        </div>
+                        <p><span>Сумма: <strong>{b.total_price.toLocaleString('ru-RU')} ₽</strong></span></p>
                       )}
                     </div>
 
@@ -676,7 +647,7 @@ export default function DashboardPage() {
                       <div className="pt-2 border-t border-slate-200">
                         <button
                           onClick={() => handleUnlockBooking(b.id)}
-                          className="w-full bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs py-2 rounded-xl flex items-center justify-center space-x-1 transition-colors"
+                          className="w-full bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs py-2 rounded-xl flex items-center justify-center space-x-1 transition-colors cursor-pointer"
                         >
                           <Unlock className="w-3.5 h-3.5" />
                           <span>Разблокировать / Открыть даты</span>
@@ -691,7 +662,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* МОДАЛЬНОЕ ОКНО: РЕДАКТИРОВАНИЕ */}
+      {/* РЕДАКТИРОВАНИЕ */}
       {editingProperty && editFormData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 relative shadow-2xl max-h-[90vh] overflow-y-auto">
