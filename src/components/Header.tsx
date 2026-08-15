@@ -2,13 +2,11 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Waves, Heart, User, LayoutDashboard, LogOut, Plus } from 'lucide-react';
+import { Waves, User, LayoutDashboard, LogOut } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { useFavorites } from '@/context/FavoritesContext';
 
 export const Header: React.FC = () => {
   const { user, logout } = useAuth();
-  const { favorites } = useFavorites();
 
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
@@ -23,22 +21,8 @@ export const Header: React.FC = () => {
           </span>
         </Link>
 
-        {/* Правая часть: Профиль / Избранное / Вход */}
+        {/* Правая часть: Вход / Кабинет / Сдать жилье */}
         <div className="flex items-center space-x-2 sm:space-x-3">
-          {/* Кнопка избранного в шапке */}
-          <Link
-            href="/profile"
-            className="relative p-2 rounded-xl text-slate-600 hover:text-rose-600 hover:bg-slate-100 transition-colors"
-            title="Избранное"
-          >
-            <Heart className={`w-5 h-5 ${favorites.length > 0 ? 'text-rose-500 fill-rose-500' : ''}`} />
-            {favorites.length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center">
-                {favorites.length}
-              </span>
-            )}
-          </Link>
-
           {user ? (
             <div className="flex items-center space-x-2">
               <Link
@@ -46,9 +30,9 @@ export const Header: React.FC = () => {
                 className="inline-flex items-center space-x-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold px-3 py-2 rounded-xl transition-all"
               >
                 {user.role === 'landlord' ? (
-                  <LayoutDashboard className="w-4 h-4 text-blue-600" />
+                  <LayoutDashboard className="w-4 h-4 text-blue-600 flex-shrink-0" />
                 ) : (
-                  <User className="w-4 h-4 text-blue-600" />
+                  <User className="w-4 h-4 text-blue-600 flex-shrink-0" />
                 )}
                 <span className="max-w-[100px] sm:max-w-[150px] truncate">{user.name}</span>
                 <span className="text-[10px] bg-blue-200/70 text-blue-800 px-1.5 py-0.5 rounded-md ml-1 hidden sm:inline-block">
@@ -67,7 +51,7 @@ export const Header: React.FC = () => {
 
               <button
                 onClick={logout}
-                className="p-2 text-slate-400 hover:text-red-600 rounded-xl hover:bg-slate-100 transition-colors"
+                className="p-2 text-slate-400 hover:text-red-600 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
                 title="Выйти из аккаунта"
               >
                 <LogOut className="w-4 h-4" />

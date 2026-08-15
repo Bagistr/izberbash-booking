@@ -5,12 +5,13 @@ import { Property } from '@/types/property';
 import { PropertyCard } from '@/components/PropertyCard';
 import { BookingModal } from '@/components/BookingModal';
 import { useFavorites } from '@/context/FavoritesContext';
-import { SlidersHorizontal, Heart, Calendar, Users, RotateCcw, MapPin } from 'lucide-react';
+import { SlidersHorizontal, Heart, Calendar, Users, RotateCcw } from 'lucide-react';
 
 interface BookedItem {
   property_id: string;
   check_in: string;
   check_out: string;
+  status: string;
 }
 
 const FILTER_BONUSES = ['Wi-Fi', 'Кондиционер', 'Мангал', 'Бассейн', 'Беседка', 'Парковка', 'Вид на море'];
@@ -19,7 +20,7 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
   const { favorites } = useFavorites();
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
 
-  // Состояния фильтров
+  // Фильтры
   const [typeFilter, setTypeFilter] = useState<'all' | 'house' | 'room'>('all');
   const [onlyFavorites, setOnlyFavorites] = useState(false);
   const [minPrice, setMinPrice] = useState<string>('');
@@ -30,6 +31,7 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
   const [maxDistance, setMaxDistance] = useState<number>(1000);
   const [selectedBonuses, setSelectedBonuses] = useState<string[]>([]);
 
+  // Загружаем все существующие брони
   const [allBookings, setAllBookings] = useState<BookedItem[]>([]);
 
   useEffect(() => {
@@ -53,33 +55,50 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
     );
   };
 
-  const isPropertyBooked = (propertyId: string, inStr: string, outStr: string) => {
-    if (!inStr || !outStr) return false;
-    const reqIn = new Date(inStr).getTime();
-    const reqOut = new Date(outStr).getTime();
+  // Проверка пересечения дат (start1 < end2 AND end1 > start2)
+  const isPropertyBookedOnDates = (propertyId: string, inDateStr: string, outDateStr: string) => {
+    if (!inDateStr || !outDateStr) return false;
+    const reqIn = new Date(inDateStr).getTime();
+    const reqOut = new Date(outDateStr).getTime();
+
+    if (reqOut <= reqIn) return false;
 
     return allBookings.some((b) => {
       if (b.property_id !== propertyId) return false;
       const bIn = new Date(b.check_in.slice(0, 10)).getTime();
       const bOut = new Date(b.check_out.slice(0, 10)).getTime();
+
+      // Если есть хоть один день пересечения — занято
       return reqIn < bOut && reqOut > bIn;
     });
   };
 
-  // Фильтрация
+  // Фильтрация объектов
   const filteredProperties = properties.filter((item) => {
+    // 1. Избранное
     if (onlyFavorites && !favorites.includes(item.id)) return false;
+
+    // 2. Тип объекта
     if (typeFilter !== 'all' && item.property_type !== typeFilter) return false;
+
+    // 3. Вместимость гостей
     if (guestsCount > 1 && item.max_guests < guestsCount) return false;
 
+    // 4. ФИЛЬТР ПО ДАТАМ (Свободен ли дом)
     if (checkInDate && checkOutDate) {
-      if (isPropertyBooked(item.id, checkInDate, checkOutDate)) return false;
+      if (isPropertyBookedOnDates(item.id, checkInDate, checkOutDate)) {
+        return false; // Исключаем забронированный объект
+      }
     }
 
+    // 5. Цена
     if (minPrice && item.price_per_night < Number(minPrice)) return false;
     if (maxPrice && item.price_per_night > Number(maxPrice)) return false;
+
+    // 6. Расстояние до моря
     if (item.distance_to_sea > maxDistance) return false;
 
+    // 7. Бонусы и удобства
     if (selectedBonuses.length > 0) {
       const hasAll = selectedBonuses.every((b) => item.amenities?.includes(b));
       if (!hasAll) return false;
@@ -111,11 +130,13 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
           </div>
 
           <div className="flex items-center space-x-2">
+            {/* Кнопка фильтра «Только избранное» */}
             <button
+              type="button"
               onClick={() => setOnlyFavorites(!onlyFavorites)}
               className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer ${
                 onlyFavorites
-                  ? 'bg-rose-50 text-rose-600 border border-rose-200'
+                  ? 'bg-rose-50 text-rose-600 border border-rose-200 shadow-sm'
                   : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
               }`}
             >
@@ -125,8 +146,9 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
 
             {(typeFilter !== 'all' || onlyFavorites || minPrice || maxPrice || guestsCount > 1 || checkInDate || selectedBonuses.length > 0) && (
               <button
+                type="button"
                 onClick={resetFilters}
-                className="p-2 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100"
+                className="p-2 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 cursor-pointer"
                 title="Сбросить все фильтры"
               >
                 <RotateCcw className="w-4 h-4" />
@@ -137,57 +159,65 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
 
         {/* СЕТКА ГЛАВНЫХ ПАРАМЕТРОВ */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Даты заезда и выезда */}
+          {/* 1. Даты заезда и выезда */}
           <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80">
             <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1.5 flex items-center">
               <Calendar className="w-3.5 h-3.5 mr-1 text-blue-600" />
-              <span>Даты поездки</span>
+              <span>Даты отдыха (поиск свободных)</span>
             </label>
             <div className="grid grid-cols-2 gap-2">
-              <input
-                type="date"
-                value={checkInDate}
-                onChange={(e) => setCheckInDate(e.target.value)}
-                className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-xl px-2.5 py-2 text-slate-800"
-              />
-              <input
-                type="date"
-                value={checkOutDate}
-                onChange={(e) => setCheckOutDate(e.target.value)}
-                className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-xl px-2.5 py-2 text-slate-800"
-              />
+              <div>
+                <span className="text-[10px] text-slate-400 block mb-0.5">Заезд</span>
+                <input
+                  type="date"
+                  value={checkInDate}
+                  onChange={(e) => setCheckInDate(e.target.value)}
+                  className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-xl px-2.5 py-2 text-slate-800"
+                />
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 block mb-0.5">Выезд</span>
+                <input
+                  type="date"
+                  value={checkOutDate}
+                  onChange={(e) => setCheckOutDate(e.target.value)}
+                  className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-xl px-2.5 py-2 text-slate-800"
+                />
+              </div>
             </div>
           </div>
 
-          {/* Количество гостей */}
+          {/* 2. Количество гостей */}
           <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80">
             <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1.5 flex items-center">
               <Users className="w-3.5 h-3.5 mr-1 text-blue-600" />
               <span>Сколько гостей</span>
             </label>
-            <select
-              value={guestsCount}
-              onChange={(e) => setGuestsCount(Number(e.target.value))}
-              className="w-full text-xs font-bold bg-white border border-slate-200 rounded-xl px-3 py-2 text-slate-800"
-            >
-              <option value={1}>1+ гость</option>
-              <option value={2}>2+ гостей</option>
-              <option value={4}>4+ гостей</option>
-              <option value={6}>6+ гостей</option>
-              <option value={8}>8+ гостей</option>
-              <option value={10}>10+ гостей</option>
-            </select>
+            <div className="pt-2">
+              <select
+                value={guestsCount}
+                onChange={(e) => setGuestsCount(Number(e.target.value))}
+                className="w-full text-xs font-bold bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800"
+              >
+                <option value={1}>1+ гость</option>
+                <option value={2}>2+ гостей</option>
+                <option value={4}>4+ гостей</option>
+                <option value={6}>6+ гостей</option>
+                <option value={8}>8+ гостей</option>
+                <option value={10}>10+ гостей</option>
+              </select>
+            </div>
           </div>
 
-          {/* Тип жилья */}
+          {/* 3. Тип жилья */}
           <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80">
             <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1.5">Тип объекта</label>
-            <div className="grid grid-cols-3 gap-1">
+            <div className="grid grid-cols-3 gap-1 pt-2">
               <button
                 type="button"
                 onClick={() => setTypeFilter('all')}
-                className={`py-2 text-xs font-bold rounded-xl transition-all ${
-                  typeFilter === 'all' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200'
+                className={`py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                  typeFilter === 'all' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
                 }`}
               >
                 Все
@@ -195,8 +225,8 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
               <button
                 type="button"
                 onClick={() => setTypeFilter('house')}
-                className={`py-2 text-xs font-bold rounded-xl transition-all ${
-                  typeFilter === 'house' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200'
+                className={`py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                  typeFilter === 'house' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
                 }`}
               >
                 Дома
@@ -204,8 +234,8 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
               <button
                 type="button"
                 onClick={() => setTypeFilter('room')}
-                className={`py-2 text-xs font-bold rounded-xl transition-all ${
-                  typeFilter === 'room' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200'
+                className={`py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                  typeFilter === 'room' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
                 }`}
               >
                 Номера
@@ -280,19 +310,28 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
       {/* КАТАЛОГ ОБЪЕКТОВ */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl sm:text-2xl font-black text-slate-900">
-          Доступные варианты ({filteredProperties.length})
+          {checkInDate && checkOutDate ? (
+            <span>Свободные варианты на ваши даты ({filteredProperties.length})</span>
+          ) : (
+            <span>Доступные варианты ({filteredProperties.length})</span>
+          )}
         </h2>
       </div>
 
       {filteredProperties.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-3xl border border-slate-200 space-y-3">
-          <p className="text-slate-700 font-bold text-base">По вашему запросу ничего не найдено</p>
+          <p className="text-slate-700 font-bold text-base">
+            {onlyFavorites ? 'В избранном пока ничего нет' : 'На выбранные даты нет свободных объектов'}
+          </p>
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
-            Попробуйте изменить даты, уменьшить количество гостей или сбросить фильтры.
+            {onlyFavorites
+              ? 'Нажимайте на сердечко в углу карточки объявления, чтобы добавить его сюда.'
+              : 'Попробуйте изменить даты заезда или сбросить фильтры.'}
           </p>
           <button
+            type="button"
             onClick={resetFilters}
-            className="inline-flex items-center space-x-1.5 bg-blue-50 text-blue-600 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-blue-100 transition-colors"
+            className="inline-flex items-center space-x-1.5 bg-blue-50 text-blue-600 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-blue-100 transition-colors cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Сбросить фильтры</span>

@@ -2,8 +2,9 @@
 
 import React, { useState, TouchEvent } from 'react';
 import Link from 'next/link';
-import { MapPin, Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import { MapPin, Check, ChevronLeft, ChevronRight, Heart, Users } from 'lucide-react';
 import { Property } from '@/types/property';
+import { useFavorites } from '@/context/FavoritesContext';
 
 interface PropertyCardProps {
   property: Property;
@@ -11,9 +12,13 @@ interface PropertyCardProps {
 }
 
 export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onBook }) => {
-  const photos = property.photos && property.photos.length > 0 
-    ? property.photos 
-    : ['https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=1000&q=80'];
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const isFav = isFavorite(property.id);
+
+  const photos =
+    property.photos && property.photos.length > 0
+      ? property.photos
+      : ['https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=1000&q=80'];
 
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
@@ -30,7 +35,6 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onBook }) 
     setCurrentPhotoIndex((prev) => (prev === photos.length - 1 ? 0 : prev + 1));
   };
 
-  // Логика свайпа пальцем
   const handleTouchStart = (e: TouchEvent) => {
     setTouchStartX(e.touches[0].clientX);
   };
@@ -40,19 +44,24 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onBook }) 
     const touchEndX = e.changedTouches[0].clientX;
     const diff = touchStartX - touchEndX;
 
-    // Порог свайпа — 40px
     if (diff > 40) {
-      nextPhoto(); // Смах влево -> следующее фото
+      nextPhoto();
     } else if (diff < -40) {
-      prevPhoto(); // Смах вправо -> предыдущее фото
+      prevPhoto();
     }
     setTouchStartX(null);
   };
 
+  const handleHeartClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleFavorite(property.id);
+  };
+
   return (
-    <div className="bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-200 flex flex-col h-full group">
-      {/* Слайдер картинок со свайпом */}
-      <div 
+    <div className="bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-200 flex flex-col h-full group relative">
+      {/* Слайдер картинок */}
+      <div
         className="relative h-64 w-full overflow-hidden bg-slate-100 select-none"
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
@@ -70,7 +79,21 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onBook }) 
           {property.distance_to_sea} м до моря
         </div>
 
-        {/* Кнопки-стрелки для ПК */}
+        {/* КНОПКА-СЕРДЕЧКО В ПРАВОМ ВЕРХНЕМ УГЛУ */}
+        <button
+          type="button"
+          onClick={handleHeartClick}
+          className="absolute top-3 right-3 p-2.5 rounded-full bg-white/90 hover:bg-white backdrop-blur-md transition-all shadow-md z-20 cursor-pointer hover:scale-110 active:scale-95"
+          title={isFav ? 'Удалить из избранного' : 'Добавить в избранное'}
+        >
+          <Heart
+            className={`w-5 h-5 transition-colors ${
+              isFav ? 'fill-rose-500 text-rose-500' : 'text-slate-600 hover:text-rose-500'
+            }`}
+          />
+        </button>
+
+        {/* Стрелочки переключения фото для ПК */}
         {photos.length > 1 && (
           <>
             <button
@@ -86,7 +109,6 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onBook }) 
               <ChevronRight className="w-4 h-4" />
             </button>
 
-            {/* Точки-индикаторы */}
             <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex space-x-1.5 z-10">
               {photos.map((_, idx) => (
                 <div
@@ -104,9 +126,15 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onBook }) 
       {/* Описание */}
       <div className="p-5 flex flex-col flex-grow justify-between">
         <div>
-          <div className="flex items-center text-slate-500 text-xs mb-1.5">
-            <MapPin className="w-3.5 h-3.5 mr-1 text-slate-400" />
-            <span className="line-clamp-1">{property.address}</span>
+          <div className="flex items-center justify-between text-slate-500 text-xs mb-1.5">
+            <div className="flex items-center">
+              <MapPin className="w-3.5 h-3.5 mr-1 text-slate-400 flex-shrink-0" />
+              <span className="line-clamp-1">{property.address}</span>
+            </div>
+            <div className="flex items-center text-slate-600 font-semibold flex-shrink-0 ml-2">
+              <Users className="w-3.5 h-3.5 mr-1 text-blue-600" />
+              <span>до {property.max_guests}</span>
+            </div>
           </div>
 
           <Link href={`/property/${property.id}`}>
@@ -115,7 +143,7 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onBook }) 
             </h3>
           </Link>
 
-          {/* Главные бонусы */}
+          {/* Удобства */}
           <div className="flex flex-wrap gap-1.5 mb-4">
             {property.amenities?.slice(0, 3).map((item, index) => (
               <span
