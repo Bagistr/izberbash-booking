@@ -3,10 +3,13 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Waves, ArrowLeft, Lock, Phone, User, AlertCircle, Compass, Home } from 'lucide-react';
+import { Waves, ArrowLeft, Lock, Phone, User as UserIcon, AlertCircle, Compass, Building } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { login } = useAuth();
+
   const [isRegister, setIsRegister] = useState(false);
   const [role, setRole] = useState<'guest' | 'landlord'>('guest');
   const [name, setName] = useState('');
@@ -39,17 +42,17 @@ export default function LoginPage() {
         throw new Error(data.error || 'Ошибка входа');
       }
 
-      // Сохраняем сессию пользователя
-      localStorage.setItem('rp_user', JSON.stringify(data.user));
-      localStorage.setItem('landlord_user', JSON.stringify(data.user)); // для обратной совместимости
+      // Сохраняем сессию через контекст
+      login(data.user);
 
+      // Строгая маршрутизация по роли:
       if (data.user.role === 'landlord') {
         router.push('/dashboard');
       } else {
         router.push('/profile');
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'Произошла ошибка при авторизации');
+      setErrorMsg(err.message || 'Ошибка авторизации');
     } finally {
       setLoading(false);
     }
@@ -66,21 +69,22 @@ export default function LoginPage() {
             Райский<span className="text-blue-600">Пляж</span>
           </span>
         </Link>
+
         <h2 className="text-2xl font-black text-slate-900">
           {isRegister ? 'Регистрация' : 'Вход в аккаунт'}
         </h2>
         <p className="text-xs text-slate-500 mt-1">
-          {role === 'guest' ? 'Личный кабинет туриста и история поездок' : 'Панель управления для владельцев жилья'}
+          {role === 'guest' ? 'Кабинет туриста: история броней и избранное' : 'Кабинет владельца: шахматка и управление объектами'}
         </p>
       </div>
 
       <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md px-4">
-        {/* Переключатель: Турист / Арендодатель */}
-        <div className="grid grid-cols-2 gap-2 mb-4 bg-slate-200/70 p-1 rounded-2xl">
+        {/* Крупный выбор роли */}
+        <div className="grid grid-cols-2 gap-2 mb-4 bg-slate-200/80 p-1 rounded-2xl">
           <button
             type="button"
             onClick={() => setRole('guest')}
-            className={`py-2 text-xs font-bold rounded-xl flex items-center justify-center space-x-1.5 transition-all ${
+            className={`py-2.5 text-xs font-extrabold rounded-xl flex items-center justify-center space-x-1.5 transition-all ${
               role === 'guest' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -90,12 +94,12 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => setRole('landlord')}
-            className={`py-2 text-xs font-bold rounded-xl flex items-center justify-center space-x-1.5 transition-all ${
+            className={`py-2.5 text-xs font-extrabold rounded-xl flex items-center justify-center space-x-1.5 transition-all ${
               role === 'landlord' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Home className="w-4 h-4" />
-            <span>Я Владелец</span>
+            <Building className="w-4 h-4" />
+            <span>Я Владелец жилья</span>
           </button>
         </div>
 
@@ -112,7 +116,7 @@ export default function LoginPage() {
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Ваше имя</label>
                 <div className="relative">
-                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <input
                     type="text"
                     required

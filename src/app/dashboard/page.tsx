@@ -3,12 +3,14 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
 import {
   Waves, DollarSign, TrendingUp, Users, Calendar as CalendarIcon,
   Plus, LogOut, Edit3, Eye, EyeOff, ChevronLeft, ChevronRight,
-  X, Check, MapPin, Building, Home, Phone, User, Lock, Unlock, Trash2
+  X, Check, MapPin, Building, Home, Phone, User, Lock, Unlock
 } from 'lucide-react';
 import { Property } from '@/types/property';
+
 
 interface BookingItem {
   id: string;
@@ -103,17 +105,24 @@ export default function DashboardPage() {
     }
   };
 
+  const { user, logout, isLoading } = useAuth();
+
   useEffect(() => {
-    const stored = localStorage.getItem('landlord_user');
-    if (!stored) {
+    if (isLoading) return;
+
+    if (!user) {
       router.push('/login');
       return;
     }
 
-    const parsedUser = JSON.parse(stored);
-    setUser(parsedUser);
-    loadData(parsedUser.phone);
-  }, [router]);
+    if (user.role !== 'landlord') {
+      // Турист не должен быть в дашборде владельца
+      router.push('/profile');
+      return;
+    }
+
+    loadData(user.phone);
+  }, [user, isLoading, router]);
 
   const handleLogout = () => {
     localStorage.removeItem('landlord_user');

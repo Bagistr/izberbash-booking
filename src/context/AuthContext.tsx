@@ -29,12 +29,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem('rp_user');
+      const stored = localStorage.getItem('dagbooking_auth_user');
       if (stored) {
         setUser(JSON.parse(stored));
       }
     } catch (e) {
-      console.error('Ошибка чтения пользователя:', e);
+      console.error(e);
     } finally {
       setIsLoading(false);
     }
@@ -42,12 +42,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = (userData: User) => {
     setUser(userData);
-    localStorage.setItem('rp_user', JSON.stringify(userData));
-    localStorage.setItem('landlord_user', JSON.stringify(userData));
+    localStorage.setItem('dagbooking_auth_user', JSON.stringify(userData));
+    // Чистим старые конфликтующие ключи
+    localStorage.removeItem('rp_user');
+    localStorage.removeItem('landlord_user');
   };
 
   const logout = () => {
     setUser(null);
+    localStorage.removeItem('dagbooking_auth_user');
     localStorage.removeItem('rp_user');
     localStorage.removeItem('landlord_user');
   };

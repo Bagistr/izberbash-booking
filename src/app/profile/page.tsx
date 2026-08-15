@@ -29,12 +29,23 @@ export default function GuestProfilePage() {
   const [activeTab, setActiveTab] = useState<'bookings' | 'favorites'>('bookings');
   const [loading, setLoading] = useState(true);
 
+  const { user, logout, isLoading } = useAuth();
+
   useEffect(() => {
-    const stored = localStorage.getItem('rp_user');
-    if (!stored) {
+    if (isLoading) return;
+
+    if (!user) {
       router.push('/login');
       return;
     }
+
+    if (user.role === 'landlord') {
+      router.push('/dashboard');
+      return;
+    }
+
+    loadProfileData();
+  }, [user, isLoading, router, favorites]);
 
     const parsed = JSON.parse(stored);
     setUser(parsed);
