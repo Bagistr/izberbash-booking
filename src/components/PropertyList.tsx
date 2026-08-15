@@ -60,32 +60,25 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
     );
   };
 
-  // Точная проверка занятости по датам (YYYY-MM-DD)
-  const isPropertyBookedOnDates = (property: Property, inStr: string, outStr: string) => {
-    if (!inStr || !outStr || inStr >= outStr) return false;
+  const isPropertyBookedOnDates = (property: Property, inDateStr: string, outDateStr: string) => {
+    if (!inDateStr || !outDateStr || inDateStr >= outDateStr) return false;
 
-    // Находим все брони этого объекта
     const propBookings = allBookings.filter((b) => b.property_id === property.id);
     if (propBookings.length === 0) return false;
 
-    // Проверяем, есть ли брони, пересекающиеся с запрошенным интервалом
-    // Пересечение: check_in < req_out И check_out > req_in
     const conflictingBookings = propBookings.filter((b) => {
       const bIn = b.check_in.slice(0, 10);
       const bOut = b.check_out.slice(0, 10);
-      return bIn < outStr && bOut > inStr;
+      return bIn < outStr && bOut > inDateStr;
     });
 
-    // Если у объекта есть под-юниты (например, 3 домика), проверяем, заняты ли ВСЕ юниты
     if (property.units && property.units.length > 0) {
       const bookedUnitIds = new Set(
         conflictingBookings.map((b) => b.unit_id).filter(Boolean)
       );
-      // Если все домики заняты — объект недоступен
       return bookedUnitIds.size >= property.units.length;
     }
 
-    // Для обычного объекта: если есть хотя бы 1 пересечение — он занят
     return conflictingBookings.length > 0;
   };
 
