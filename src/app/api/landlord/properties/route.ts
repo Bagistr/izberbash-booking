@@ -10,18 +10,16 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Номер телефона обязателен' }, { status: 400 });
     }
 
-    // Извлекаем чистые последние 10 цифр номера (без +7, 8, пробелов и скобок)
     const rawDigits = phone.replace(/\D/g, '');
     const clean10Digits = rawDigits.slice(-10);
 
-    // 1. Ищем объекты владельца по последним 10 цифрам номера
+    // 1. Находим объекты владельца
     const properties = await sql`
       SELECT * FROM properties
       WHERE regexp_replace(landlord_phone, '\D', '', 'g') LIKE ${`%${clean10Digits}`}
       ORDER BY created_at DESC
     `;
 
-    // 2. Получаем все брони для этих объектов
     const propertyIds = properties.map((p) => p.id);
 
     let bookings: any[] = [];
@@ -39,16 +37,33 @@ export async function GET(request: Request) {
       `;
     }
 
-    // 3. Считаем статистику с комиссией 7%
-    const validBookings = bookings.filter((b) => b.status === 'confirmed');
+    // 2. Считаем коммерческие бронирования (с сайта)
+    const paidBookings = bookings.filter(
+      (b) => b.status !== 'blocked' && Number(b.total_price) > 0
+    );
 
-    const totalRevenue = validBookings.reduce((acc, b) => acc + Number(b.total_price || 0), 0);
-    const platformCommission = Math.round(totalRevenue * 0.07);
-    const netRevenue = totalRevenue - platformCommission;
-    const totalGuests = validBookings.reduce((acc, b) => acc + Number(b.guests_count || 1), 0);
+    const totalRevenue = paidBookings.reduce(
+      (acc, b) => acc + Number(b.total_price || 0),
+      0
+    );
+    const platformCommission = Math.round(totalRevenue * 0.07); // 7% комиссия
+    const netRevenue = totalRevenue - platformCommission; // 93% чистый доход
 
-    const totalDays = validBookings.reduce((acc, b) => acc + Number(b.total_days || 1), 0);
-    const avgDays = validBookings.length > 0 ? (totalDays / validBookings.length).toFixed(1) : '0';
+    const totalGuests = paidBookings.reduce(
+      (acc, b) => acc + Number(b.guests_count || 1),
+      0
+    );
+
+    // 3. Средний срок бронирования по всем броням и заездам
+    const allOccupiedBookings = bookings.filter((b) => Number(b.total_days) > 0);
+    const totalDays = allOccupiedBookings.reduce(
+      (acc, b) => acc + Number(b.total_days || 0),
+      0
+    );
+    const avgDays =
+      allOccupiedBookings.length > 0
+        ? (totalDays / allOccupiedBookings.length).toFixed(1)
+        : '0';
 
     return NextResponse.json({
       properties,
