@@ -6,7 +6,10 @@ import { PropertyCard } from '@/components/PropertyCard';
 import { BookingModal } from '@/components/BookingModal';
 import { useFavorites } from '@/context/FavoritesContext';
 import { useAuth } from '@/context/AuthContext';
-import { SlidersHorizontal, Heart, Calendar, Users, RotateCcw } from 'lucide-react';
+import {
+  Search, SlidersHorizontal, Calendar, Users, Heart,
+  RotateCcw, X, Waves, Check, Home, Building2
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface BookedItem {
@@ -36,7 +39,9 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
   const [maxDistance, setMaxDistance] = useState<number>(1000);
   const [selectedBonuses, setSelectedBonuses] = useState<string[]>([]);
 
-  // Загружаем все занятые даты из базы
+  // Модалка расширенных фильтров
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+
   const [allBookings, setAllBookings] = useState<BookedItem[]>([]);
 
   useEffect(() => {
@@ -48,7 +53,7 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
           setAllBookings(data || []);
         }
       } catch (e) {
-        console.error('Ошибка загрузки броней:', e);
+        console.error('Ошибка загрузки занятых дат:', e);
       }
     }
     loadBookings();
@@ -60,8 +65,8 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
     );
   };
 
-  const isPropertyBookedOnDates = (property: Property, inDateStr: string, outDateStr: string) => {
-    if (!inDateStr || !outDateStr || inDateStr >= outDateStr) return false;
+  const isPropertyBookedOnDates = (property: Property, inStr: string, outStr: string) => {
+    if (!inStr || !outStr || inStr >= outStr) return false;
 
     const propBookings = allBookings.filter((b) => b.property_id === property.id);
     if (propBookings.length === 0) return false;
@@ -69,7 +74,7 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
     const conflictingBookings = propBookings.filter((b) => {
       const bIn = b.check_in.slice(0, 10);
       const bOut = b.check_out.slice(0, 10);
-      return bIn < outDateStr && bOut > inDateStr;
+      return bIn < outStr && bOut > inStr;
     });
 
     if (property.units && property.units.length > 0) {
@@ -82,32 +87,21 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
     return conflictingBookings.length > 0;
   };
 
-  // Фильтрация
   const filteredProperties = properties.filter((item) => {
-    // 1. Избранное
     if (onlyFavorites && !favorites.includes(item.id)) return false;
-
-    // 2. Тип объекта
     if (typeFilter !== 'all' && item.property_type !== typeFilter) return false;
-
-    // 3. Вместимость гостей
     if (guestsCount > 1 && item.max_guests < guestsCount) return false;
 
-    // 4. ФИЛЬТР ПО ДАТАМ (Скрываем занятые)
     if (checkInDate && checkOutDate) {
       if (isPropertyBookedOnDates(item, checkInDate, checkOutDate)) {
         return false;
       }
     }
 
-    // 5. Цена
     if (minPrice && item.price_per_night < Number(minPrice)) return false;
     if (maxPrice && item.price_per_night > Number(maxPrice)) return false;
-
-    // 6. Расстояние до моря
     if (item.distance_to_sea > maxDistance) return false;
 
-    // 7. Бонусы
     if (selectedBonuses.length > 0) {
       const hasAll = selectedBonuses.every((b) => item.amenities?.includes(b));
       if (!hasAll) return false;
@@ -136,221 +130,165 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
     setSelectedBonuses([]);
   };
 
+  const activeFiltersCount =
+    (typeFilter !== 'all' ? 1 : 0) +
+    (minPrice || maxPrice ? 1 : 0) +
+    (maxDistance < 1000 ? 1 : 0) +
+    selectedBonuses.length;
+
   return (
-    <div className="space-y-6">
-      {/* ПАНЕЛЬ ФИЛЬТРОВ */}
-      <div className="bg-white p-5 sm:p-7 rounded-3xl border border-slate-200 shadow-sm space-y-5">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
-          <div className="flex items-center space-x-2">
-            <SlidersHorizontal className="w-5 h-5 text-blue-600" />
-            <h3 className="font-extrabold text-slate-900 text-base">Фильтры поиска жилья</h3>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            {/* Кнопка «Только избранное» */}
-            <button
-              type="button"
-              onClick={handleFavoritesClick}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer ${
-                onlyFavorites
-                  ? 'bg-rose-50 text-rose-600 border border-rose-200 shadow-sm'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-              }`}
-            >
-              <Heart className={`w-4 h-4 ${onlyFavorites ? 'fill-rose-500 text-rose-500' : ''}`} />
-              <span>Только избранное ({favorites.length})</span>
-            </button>
-
-            {(typeFilter !== 'all' || onlyFavorites || minPrice || maxPrice || guestsCount > 1 || checkInDate || selectedBonuses.length > 0) && (
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="p-2 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 cursor-pointer"
-                title="Сбросить все фильтры"
-              >
-                <RotateCcw className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* СЕТКА ГЛАВНЫХ ПАРАМЕТРОВ */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* 1. Даты заезда и выезда */}
-          <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80">
-            <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1.5 flex items-center">
-              <Calendar className="w-3.5 h-3.5 mr-1 text-blue-600" />
-              <span>Даты отдыха (поиск свободных)</span>
-            </label>
-            <div className="grid grid-cols-2 gap-2">
+    <div className="space-y-8">
+      {/* 1. КОМПАКТНЫЙ ПРЕМИАЛЬНЫЙ ПОИСКОВЫЙ БАР */}
+      <div className="bg-white rounded-3xl p-3 sm:p-4 shadow-xl shadow-slate-200/50 border border-slate-200/80 -mt-10 relative z-30 max-w-5xl mx-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-3 items-center">
+          {/* Даты заезда / выезда */}
+          <div className="sm:col-span-5 bg-slate-50 hover:bg-slate-100/80 transition-colors p-2.5 sm:p-3 rounded-2xl border border-slate-100 flex items-center space-x-2.5">
+            <Calendar className="w-5 h-5 text-blue-600 flex-shrink-0" />
+            <div className="grid grid-cols-2 gap-2 w-full text-xs">
               <div>
-                <span className="text-[10px] text-slate-400 block mb-0.5">Заезд</span>
+                <span className="text-[10px] uppercase font-bold text-slate-600 block">Заезд</span>
                 <input
                   type="date"
                   value={checkInDate}
                   onChange={(e) => setCheckInDate(e.target.value)}
-                  className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-xl px-2.5 py-2 text-slate-800"
+                  className="w-full bg-transparent font-bold text-slate-900 focus:outline-none cursor-pointer"
                 />
               </div>
               <div>
-                <span className="text-[10px] text-slate-400 block mb-0.5">Выезд</span>
+                <span className="text-[10px] uppercase font-bold text-slate-600 block">Выезд</span>
                 <input
                   type="date"
                   value={checkOutDate}
                   onChange={(e) => setCheckOutDate(e.target.value)}
-                  className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-xl px-2.5 py-2 text-slate-800"
+                  className="w-full bg-transparent font-bold text-slate-900 focus:outline-none cursor-pointer"
                 />
               </div>
             </div>
           </div>
 
-          {/* 2. Количество гостей */}
-          <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80">
-            <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1.5 flex items-center">
-              <Users className="w-3.5 h-3.5 mr-1 text-blue-600" />
-              <span>Сколько гостей</span>
-            </label>
-            <div className="pt-2">
+          {/* Гости */}
+          <div className="sm:col-span-3 bg-slate-50 hover:bg-slate-100/80 transition-colors p-2.5 sm:p-3 rounded-2xl border border-slate-100 flex items-center space-x-2.5">
+            <Users className="w-5 h-5 text-blue-600 flex-shrink-0" />
+            <div className="w-full text-xs">
+              <span className="text-[10px] uppercase font-bold text-slate-600 block">Кто едет</span>
               <select
                 value={guestsCount}
                 onChange={(e) => setGuestsCount(Number(e.target.value))}
-                className="w-full text-xs font-bold bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800"
+                className="w-full bg-transparent font-bold text-slate-900 focus:outline-none cursor-pointer"
               >
-                <option value={1}>1+ гость</option>
-                <option value={2}>2+ гостей</option>
-                <option value={4}>4+ гостей</option>
+                <option value={1}>1 гость</option>
+                <option value={2}>2 гостя</option>
+                <option value={4}>4 гостя</option>
                 <option value={6}>6+ гостей</option>
                 <option value={8}>8+ гостей</option>
-                <option value={10}>10+ гостей</option>
               </select>
             </div>
           </div>
 
-          {/* 3. Тип жилья */}
-          <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80">
-            <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1.5">Тип объекта</label>
-            <div className="grid grid-cols-3 gap-1 pt-2">
-              <button
-                type="button"
-                onClick={() => setTypeFilter('all')}
-                className={`py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                  typeFilter === 'all' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
-                }`}
-              >
-                Все
-              </button>
-              <button
-                type="button"
-                onClick={() => setTypeFilter('house')}
-                className={`py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                  typeFilter === 'house' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
-                }`}
-              >
-                Дома
-              </button>
-              <button
-                type="button"
-                onClick={() => setTypeFilter('room')}
-                className={`py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                  typeFilter === 'room' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
-                }`}
-              >
-                Номера
-              </button>
-            </div>
-          </div>
-        </div>
+          {/* Быстрые фильтры и кнопка */}
+          <div className="sm:col-span-4 flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={() => setIsFilterModalOpen(true)}
+              className={`flex-1 flex items-center justify-center space-x-1.5 py-3.5 px-3 rounded-2xl text-xs font-bold transition-all border ${
+                activeFiltersCount > 0
+                  ? 'bg-blue-50 text-blue-600 border-blue-200 shadow-sm'
+                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+              <span>Фильтры</span>
+              {activeFiltersCount > 0 && (
+                <span className="bg-blue-600 text-white text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center ml-1">
+                  {activeFiltersCount}
+                </span>
+              )}
+            </button>
 
-        {/* ЦЕНА, МОРЕ И УДОБСТВА */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-3 border-t border-slate-100">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">Цена за сутки (₽)</label>
-            <div className="flex space-x-2">
-              <input
-                type="number"
-                placeholder="От"
-                value={minPrice}
-                onChange={(e) => setMinPrice(e.target.value)}
-                className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"
-              />
-              <input
-                type="number"
-                placeholder="До"
-                value={maxPrice}
-                onChange={(e) => setMaxPrice(e.target.value)}
-                className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"
-              />
-            </div>
-          </div>
-
-          <div>
-            <div className="flex justify-between items-center mb-1.5">
-              <label className="block text-xs font-bold text-slate-700 uppercase">До моря не далее</label>
-              <span className="text-xs font-extrabold text-blue-600">{maxDistance} м</span>
-            </div>
-            <input
-              type="range"
-              min="50"
-              max="1000"
-              step="50"
-              value={maxDistance}
-              onChange={(e) => setMaxDistance(Number(e.target.value))}
-              className="w-full accent-blue-600 cursor-pointer"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">Удобства</label>
-            <div className="flex flex-wrap gap-1">
-              {FILTER_BONUSES.map((bonus) => {
-                const isSelected = selectedBonuses.includes(bonus);
-                return (
-                  <button
-                    key={bonus}
-                    type="button"
-                    onClick={() => toggleBonus(bonus)}
-                    className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    {bonus}
-                  </button>
-                );
-              })}
-            </div>
+            {/* Быстрая кнопка Избранное */}
+            <button
+              type="button"
+              onClick={handleFavoritesClick}
+              className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                onlyFavorites
+                  ? 'bg-rose-50 text-rose-600 border-rose-200 shadow-sm'
+                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+              }`}
+              title="Показать только избранные"
+            >
+              <Heart className={`w-4 h-4 ${onlyFavorites ? 'fill-rose-500 text-rose-500' : ''}`} />
+            </button>
           </div>
         </div>
       </div>
 
-      {/* ЗАГОЛОВОК ВЫДАЧИ */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl sm:text-2xl font-black text-slate-900">
-          {checkInDate && checkOutDate ? (
-            <span>Свободные варианты с {checkInDate} по {checkOutDate} ({filteredProperties.length})</span>
-          ) : (
-            <span>Доступные варианты ({filteredProperties.length})</span>
-          )}
-        </h2>
+      {/* 2. БЫСТРЫЕ ЧИПСЫ ТИПОВ ЖИЛЬЯ */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+        <div className="flex items-center space-x-2 overflow-x-auto pb-1 max-w-full">
+          <button
+            onClick={() => setTypeFilter('all')}
+            className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap cursor-pointer ${
+              typeFilter === 'all'
+                ? 'bg-slate-900 text-white shadow-sm'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+            }`}
+          >
+            <Waves className="w-3.5 h-3.5" />
+            <span>Все варианты ({properties.length})</span>
+          </button>
+          <button
+            onClick={() => setTypeFilter('house')}
+            className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap cursor-pointer ${
+              typeFilter === 'house'
+                ? 'bg-slate-900 text-white shadow-sm'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+            }`}
+          >
+            <Home className="w-3.5 h-3.5" />
+            <span>Коттеджи и дома</span>
+          </button>
+          <button
+            onClick={() => setTypeFilter('room')}
+            className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap cursor-pointer ${
+              typeFilter === 'room'
+                ? 'bg-slate-900 text-white shadow-sm'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+            }`}
+          >
+            <Building2 className="w-3.5 h-3.5" />
+            <span>Номера в отелях</span>
+          </button>
+        </div>
+
+        {(typeFilter !== 'all' || onlyFavorites || minPrice || maxPrice || guestsCount > 1 || checkInDate || selectedBonuses.length > 0) && (
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="text-xs font-bold text-slate-500 hover:text-slate-900 flex items-center space-x-1 cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Сбросить поиск</span>
+          </button>
+        )}
       </div>
 
+      {/* 3. КАТАЛОГ КАРТОЧЕК */}
       {filteredProperties.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-3xl border border-slate-200 space-y-3">
-          <p className="text-slate-700 font-bold text-base">
+        <div className="text-center py-20 bg-white rounded-3xl border border-slate-200 shadow-sm space-y-3">
+          <p className="text-slate-900 font-extrabold text-lg">
             {onlyFavorites ? 'В избранном пока ничего нет' : 'На выбранные даты нет свободных объектов'}
           </p>
-          <p className="text-xs text-slate-400 max-w-sm mx-auto">
+          <p className="text-xs text-slate-500 max-w-sm mx-auto">
             {onlyFavorites
-              ? 'Нажимайте на сердечко на карточке любого объявления, чтобы сохранить его в свой профиль.'
-              : 'Попробуйте изменить даты заезда или сбросить фильтры.'}
+              ? 'Нажимайте на сердечко на понравившихся карточках, чтобы собрать список здесь.'
+              : 'Попробуйте изменить даты заезда или уменьшить количество фильтров.'}
           </p>
           <button
             type="button"
             onClick={resetFilters}
-            className="inline-flex items-center space-x-1.5 bg-blue-50 text-blue-600 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-blue-100 transition-colors cursor-pointer"
+            className="inline-flex items-center space-x-1.5 bg-blue-50 text-blue-600 text-xs font-bold px-5 py-3 rounded-2xl hover:bg-blue-100 transition-colors cursor-pointer"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
+            <RotateCcw className="w-4 h-4" />
             <span>Сбросить фильтры</span>
           </button>
         </div>
@@ -363,6 +301,105 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
               onBook={(prop) => setSelectedProperty(prop)}
             />
           ))}
+        </div>
+      )}
+
+      {/* 4. ВСПЛЫВАЮЩАЯ МОДАЛКА РАСШИРЕННЫХ ФИЛЬТРОВ */}
+      {isFilterModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 relative shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center space-x-2">
+                <SlidersHorizontal className="w-5 h-5 text-blue-600" />
+                <h3 className="text-lg font-black text-slate-900">Все фильтры</h3>
+              </div>
+              <button
+                onClick={() => setIsFilterModalOpen(false)}
+                className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Диапазон цены */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Цена за сутки (₽)</label>
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="number"
+                  placeholder="От 2 000"
+                  value={minPrice}
+                  onChange={(e) => setMinPrice(e.target.value)}
+                  className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 font-bold"
+                />
+                <input
+                  type="number"
+                  placeholder="До 20 000"
+                  value={maxPrice}
+                  onChange={(e) => setMaxPrice(e.target.value)}
+                  className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 font-bold"
+                />
+              </div>
+            </div>
+
+            {/* Расстояние до моря */}
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-xs font-bold text-slate-700 uppercase">Расстояние до моря</label>
+                <span className="text-xs font-black text-teal-600">до {maxDistance} метров</span>
+              </div>
+              <input
+                type="range"
+                min="50"
+                max="1000"
+                step="50"
+                value={maxDistance}
+                onChange={(e) => setMaxDistance(Number(e.target.value))}
+                className="w-full accent-teal-600 cursor-pointer"
+              />
+            </div>
+
+            {/* Бонусы */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Удобства на территории</label>
+              <div className="flex flex-wrap gap-2">
+                {FILTER_BONUSES.map((bonus) => {
+                  const isSelected = selectedBonuses.includes(bonus);
+                  return (
+                    <button
+                      key={bonus}
+                      type="button"
+                      onClick={() => toggleBonus(bonus)}
+                      className={`text-xs font-bold px-3 py-2 rounded-xl border transition-all ${
+                        isSelected
+                          ? 'bg-teal-600 text-white border-teal-600 shadow-sm'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {isSelected ? '✓ ' : '+ '}{bonus}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="pt-4 flex items-center justify-between border-t border-slate-100">
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="text-xs font-bold text-slate-500 hover:text-slate-900"
+              >
+                Сбросить
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsFilterModalOpen(false)}
+                className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-6 py-3 rounded-xl shadow-lg shadow-teal-500/25"
+              >
+                Показать варианты ({filteredProperties.length})
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

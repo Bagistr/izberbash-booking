@@ -7,7 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import {
   Waves, DollarSign, TrendingUp, Users, Calendar as CalendarIcon,
   Plus, LogOut, Edit3, Eye, EyeOff, ChevronLeft, ChevronRight,
-  X, Lock, Unlock
+  X, Lock, Unlock, Phone, User, PlusCircle
 } from 'lucide-react';
 import { Property } from '@/types/property';
 
@@ -36,7 +36,6 @@ const MONTH_NAMES = [
   'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
   'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
 ];
-
 const DAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
 export default function DashboardPage() {
@@ -72,7 +71,7 @@ export default function DashboardPage() {
   const [savingBlock, setSavingBlock] = useState(false);
   const [blockError, setBlockError] = useState('');
 
-  // Редактирование объекта
+  // Редактирование
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [editFormData, setEditFormData] = useState<any>(null);
   const [savingEdit, setSavingEdit] = useState(false);
@@ -148,6 +147,24 @@ export default function DashboardPage() {
       const outDate = new Date(b.check_out.slice(0, 10)).getTime();
       return target >= inDate && target < outDate;
     });
+  };
+
+  // Клик по свободной ячейке шахматки
+  const handleFreeDayClick = (dateStr: string) => {
+    // Следующий день по умолчанию для даты выезда
+    const nextDate = new Date(dateStr);
+    nextDate.setDate(nextDate.getDate() + 1);
+    const nextDateStr = nextDate.toISOString().slice(0, 10);
+
+    setBlockForm((prev) => ({
+      ...prev,
+      property_id: selectedPropertyFilter !== 'all' ? selectedPropertyFilter : (properties[0]?.id || ''),
+      check_in: dateStr,
+      check_out: nextDateStr,
+      source_note: 'Авито',
+    }));
+    setBlockError('');
+    setIsBlockModalOpen(true);
   };
 
   const handleSaveBlock = async (e: React.FormEvent) => {
@@ -260,7 +277,8 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900 pb-16">
+    <main className="min-h-screen bg-[#F8FAFC] text-slate-900 pb-16">
+      {/* Хедер */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center space-x-2">
@@ -278,7 +296,7 @@ export default function DashboardPage() {
             </span>
             <button
               onClick={handleLogout}
-              className="p-2 text-slate-400 hover:text-red-600 rounded-xl hover:bg-slate-100 transition-colors"
+              className="p-2 text-slate-400 hover:text-red-600 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
               title="Выйти"
             >
               <LogOut className="w-4 h-4" />
@@ -292,22 +310,22 @@ export default function DashboardPage() {
           <div>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900">Панель управления</h1>
             <p className="text-slate-500 text-sm mt-1">
-              Финансовый отчет, шахматка занятости и управление датами.
+              Финансовый учет и шахматка бронирований в реальном времени.
             </p>
           </div>
 
           <div className="flex items-center space-x-2">
             <button
               onClick={() => setIsBlockModalOpen(true)}
-              className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-3.5 py-3 rounded-xl transition-colors inline-flex items-center space-x-1.5 shadow-sm cursor-pointer"
+              className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-4 py-3 rounded-2xl transition-colors inline-flex items-center space-x-1.5 shadow-sm cursor-pointer"
             >
               <Lock className="w-4 h-4 text-amber-400" />
-              <span>Закрыть свои даты</span>
+              <span>Закрыть даты</span>
             </button>
 
             <Link
               href="/add-property"
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-3 rounded-xl transition-colors inline-flex items-center space-x-1.5 shadow-lg shadow-blue-500/20"
+              className="bg-[#0D9488] hover:bg-[#0F766E] text-white font-bold text-xs px-4 py-3 rounded-2xl transition-colors inline-flex items-center space-x-1.5 shadow-lg shadow-teal-600/20"
             >
               <Plus className="w-4 h-4" />
               <span>Добавить жилье</span>
@@ -317,7 +335,7 @@ export default function DashboardPage() {
 
         {/* 1. БЛОК АНАЛИТИКИ */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-2">
+          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-400 uppercase">Чистый заработок</span>
               <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
@@ -325,10 +343,10 @@ export default function DashboardPage() {
               </div>
             </div>
             <p className="text-2xl font-black text-slate-900">{stats.netRevenue.toLocaleString('ru-RU')} ₽</p>
-            <p className="text-[11px] text-emerald-600 font-semibold">После вычета комиссии 10%</p>
+            <p className="text-[11px] text-emerald-600 font-bold">После вычета комиссии 10%</p>
           </div>
 
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-2">
+          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-400 uppercase">Комиссия сервиса</span>
               <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
@@ -336,10 +354,10 @@ export default function DashboardPage() {
               </div>
             </div>
             <p className="text-2xl font-black text-blue-600">{stats.platformCommission.toLocaleString('ru-RU')} ₽</p>
-            <p className="text-[11px] text-slate-400">Плата за привлечение клиентов</p>
+            <p className="text-[11px] text-slate-400">Плата за клиентов</p>
           </div>
 
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-2">
+          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-400 uppercase">Заселено гостей</span>
               <div className="p-2 bg-purple-50 text-purple-600 rounded-xl">
@@ -347,10 +365,10 @@ export default function DashboardPage() {
               </div>
             </div>
             <p className="text-2xl font-black text-slate-900">{stats.totalGuests} туристов</p>
-            <p className="text-[11px] text-slate-400">Оформили через платформу</p>
+            <p className="text-[11px] text-slate-400">Прямые бронирования</p>
           </div>
 
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-2">
+          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-400 uppercase">Средний срок брони</span>
               <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
@@ -358,12 +376,12 @@ export default function DashboardPage() {
               </div>
             </div>
             <p className="text-2xl font-black text-slate-900">{stats.avgDays} ночи</p>
-            <p className="text-[11px] text-slate-400">В среднем живут гости</p>
+            <p className="text-[11px] text-slate-400">Средняя продолжительность</p>
           </div>
         </div>
 
-        {/* 2. ШАХМАТКА ЗАНЯТОСТИ */}
-        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+        {/* 2. ИНТЕРАКТИВНАЯ ШАХМАТКА ЗАСЕЛЕННОСТИ */}
+        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
             <div className="flex items-center space-x-3">
               <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
@@ -371,7 +389,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <h2 className="text-lg font-bold text-slate-900">Шахматка заселённости</h2>
-                <p className="text-xs text-slate-500">Синие плашки — брони с сайта, серые — закрытые вами даты</p>
+                <p className="text-xs text-slate-500">Кликните по любой свободной ячейке, чтобы быстро закрыть дату</p>
               </div>
             </div>
 
@@ -379,7 +397,7 @@ export default function DashboardPage() {
               <select
                 value={selectedPropertyFilter}
                 onChange={(e) => setSelectedPropertyFilter(e.target.value)}
-                className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-semibold"
+                className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-semibold text-slate-800"
               >
                 <option value="all">Все мои объекты</option>
                 {properties.map((p) => (
@@ -404,7 +422,7 @@ export default function DashboardPage() {
           <div>
             <div className="grid grid-cols-7 gap-2 mb-2 text-center text-xs font-bold text-slate-400">
               {DAY_NAMES.map((d, i) => (
-                <div key={i} className="py-1">{d}</div>
+                <div key={i}>{d}</div>
               ))}
             </div>
 
@@ -427,22 +445,26 @@ export default function DashboardPage() {
                       if (isOccupied) {
                         setSelectedDayBookings(dayBookings);
                         setSelectedDayDate(formattedDate);
+                      } else {
+                        handleFreeDayClick(formattedDate);
                       }
                     }}
-                    className={`h-16 sm:h-20 p-1.5 sm:p-2 rounded-2xl border transition-all flex flex-col justify-between ${
+                    className={`h-16 sm:h-20 p-1.5 sm:p-2 rounded-2xl border transition-all flex flex-col justify-between group cursor-pointer ${
                       isOccupied
                         ? hasPlatformBooking
-                          ? 'bg-blue-50/80 border-blue-200 hover:border-blue-400 cursor-pointer shadow-sm hover:scale-[1.02]'
-                          : 'bg-slate-100 border-slate-300 hover:border-slate-400 cursor-pointer shadow-sm hover:scale-[1.02]'
-                        : 'bg-white border-slate-100 text-slate-400'
+                          ? 'bg-blue-50 border-blue-200 hover:border-blue-400 shadow-sm'
+                          : 'bg-slate-100 border-slate-300 hover:border-slate-400 shadow-sm'
+                        : 'bg-white border-slate-200 hover:border-teal-500 hover:bg-teal-50/30'
                     }`}
                   >
                     <div className="flex justify-between items-center">
                       <span className={`text-xs font-bold ${isOccupied ? (hasPlatformBooking ? 'text-blue-700' : 'text-slate-700') : 'text-slate-600'}`}>
                         {dayNum}
                       </span>
-                      {isOccupied && (
+                      {isOccupied ? (
                         <span className={`w-2 h-2 rounded-full ${hasPlatformBooking ? 'bg-blue-600' : 'bg-slate-500'}`}></span>
+                      ) : (
+                        <PlusCircle className="w-3.5 h-3.5 text-teal-600 opacity-0 group-hover:opacity-100 transition-opacity" />
                       )}
                     </div>
 
@@ -468,7 +490,7 @@ export default function DashboardPage() {
         </div>
 
         {/* 3. МОИ ОБЪЯВЛЕНИЯ */}
-        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-6">
           <div className="flex items-center justify-between border-b border-slate-100 pb-4">
             <h2 className="text-lg font-bold text-slate-900">Мои объекты ({properties.length})</h2>
           </div>
@@ -476,7 +498,7 @@ export default function DashboardPage() {
           {properties.length === 0 ? (
             <div className="text-center py-10">
               <p className="text-slate-500 text-sm mb-4">У вас пока нет добавленных объектов.</p>
-              <Link href="/add-property" className="bg-blue-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl hover:bg-blue-700 transition-colors inline-block">
+              <Link href="/add-property" className="bg-[#0D9488] text-white font-bold text-xs px-5 py-3 rounded-2xl hover:bg-[#0F766E] transition-colors inline-block">
                 Добавить объект
               </Link>
             </div>
@@ -521,7 +543,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* МОДАЛЬНОЕ ОКНО БЛОКИРОВКИ ДАТ */}
+      {/* МОДАЛКА БЫСТРОГО ЗАКРЫТИЯ ДАТ */}
       {isBlockModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 relative shadow-2xl space-y-4">
@@ -534,8 +556,8 @@ export default function DashboardPage() {
                 <Lock className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Закрыть свои даты</h3>
-                <p className="text-xs text-slate-500">Заблокирует даты для туристов на сайте</p>
+                <h3 className="text-lg font-bold text-slate-900">Закрыть даты</h3>
+                <p className="text-xs text-slate-500">Заблокирует возможность бронирования на сайте</p>
               </div>
             </div>
 
@@ -545,11 +567,11 @@ export default function DashboardPage() {
 
             <form onSubmit={handleSaveBlock} className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Выберите объект</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Объект</label>
                 <select
                   value={blockForm.property_id}
                   onChange={(e) => setBlockForm({ ...blockForm, property_id: e.target.value })}
-                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 font-semibold"
+                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 font-semibold text-slate-800"
                 >
                   {properties.map((p) => (
                     <option key={p.id} value={p.id}>{p.title}</option>
@@ -565,7 +587,7 @@ export default function DashboardPage() {
                     required
                     value={blockForm.check_in}
                     onChange={(e) => setBlockForm({ ...blockForm, check_in: e.target.value })}
-                    className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5"
+                    className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 font-bold"
                   />
                 </div>
                 <div>
@@ -575,20 +597,20 @@ export default function DashboardPage() {
                     required
                     value={blockForm.check_out}
                     onChange={(e) => setBlockForm({ ...blockForm, check_out: e.target.value })}
-                    className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5"
+                    className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 font-bold"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Причина / Источник брони</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Источник</label>
                 <select
                   value={blockForm.source_note}
                   onChange={(e) => setBlockForm({ ...blockForm, source_note: e.target.value })}
-                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5"
+                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 font-semibold"
                 >
-                  <option value="Авито">Клиент с Авито</option>
-                  <option value="Суточно.ру">Клиент с Суточно.ру</option>
+                  <option value="Авито">Бронь с Авито</option>
+                  <option value="Суточно.ру">Бронь с Суточно.ру</option>
                   <option value="Звонок / Постоянные клиенты">Звонок / Постоянный клиент</option>
                   <option value="Личный приезд / Семья">Личный приезд / Семья</option>
                   <option value="Ремонт / Уборка">Ремонт / Генеральная уборка</option>
@@ -600,14 +622,14 @@ export default function DashboardPage() {
                 disabled={savingBlock}
                 className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs py-3.5 rounded-xl transition-colors mt-2 cursor-pointer"
               >
-                {savingBlock ? 'Сохранение...' : 'Заблокировать выбранные дни'}
+                {savingBlock ? 'Сохранение...' : 'Заблокировать даты'}
               </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* ДЕТАЛИ БРОНИ И РАЗБЛОКИРОВКА */}
+      {/* ДЕТАЛИ ЗАНЯТОСТИ НА ДАТУ */}
       {selectedDayBookings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 relative shadow-2xl space-y-4">
@@ -650,7 +672,7 @@ export default function DashboardPage() {
                           className="w-full bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs py-2 rounded-xl flex items-center justify-center space-x-1 transition-colors cursor-pointer"
                         >
                           <Unlock className="w-3.5 h-3.5" />
-                          <span>Разблокировать / Открыть даты</span>
+                          <span>Разблокировать дату</span>
                         </button>
                       </div>
                     )}
@@ -765,7 +787,7 @@ export default function DashboardPage() {
                         type="button"
                         onClick={() => toggleAmenity(amenity)}
                         className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-all ${
-                          isSelected ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-600 border-slate-200'
+                          isSelected ? 'bg-teal-600 text-white border-teal-600' : 'bg-slate-50 text-slate-600 border-slate-200'
                         }`}
                       >
                         {isSelected ? '✓ ' : '+ '}{amenity}
@@ -779,7 +801,7 @@ export default function DashboardPage() {
                 <button type="button" onClick={() => setEditingProperty(null)} className="text-xs font-bold text-slate-600 px-4 py-2.5 rounded-xl hover:bg-slate-100">
                   Отмена
                 </button>
-                <button type="submit" disabled={savingEdit} className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-6 py-2.5 rounded-xl">
+                <button type="submit" disabled={savingEdit} className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-6 py-2.5 rounded-xl shadow-md shadow-teal-600/20">
                   {savingEdit ? 'Сохранение...' : 'Сохранить изменения'}
                 </button>
               </div>

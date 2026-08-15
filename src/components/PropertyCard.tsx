@@ -60,7 +60,6 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onBook }) 
     e.preventDefault();
     e.stopPropagation();
 
-    // Если не вошел — перенаправляем на авторизацию
     if (!user) {
       router.push('/login');
       return;
@@ -70,7 +69,7 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onBook }) 
   };
 
   return (
-    <div className="bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-200 flex flex-col h-full group relative">
+    <div className="bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-200/80 flex flex-col h-full group relative">
       {/* Слайдер картинок */}
       <div
         className="relative h-64 w-full overflow-hidden bg-slate-100 select-none"
@@ -85,26 +84,26 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onBook }) 
           />
         </Link>
 
-        {/* Значок расстояния до моря */}
+        {/* Бейдж расстояния */}
         <div className="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full z-10">
           {property.distance_to_sea} м до моря
         </div>
 
-        {/* КНОПКА-СЕРДЕЧКО */}
+        {/* Кнопка сердечка (Коралловый акцент) */}
         <button
           type="button"
           onClick={handleHeartClick}
           className="absolute top-3 right-3 p-2.5 rounded-full bg-white/90 hover:bg-white backdrop-blur-md transition-all shadow-md z-20 cursor-pointer hover:scale-110 active:scale-95"
-          title={user ? (isFav ? 'Удалить из избранного' : 'Добавить в избранное') : 'Войдите, чтобы сохранить в избранное'}
+          title={user ? (isFav ? 'Удалить из избранного' : 'Добавить в избранное') : 'Войдите, чтобы сохранить'}
         >
           <Heart
             className={`w-5 h-5 transition-colors ${
-              isFav ? 'fill-rose-500 text-rose-500' : 'text-slate-600 hover:text-rose-500'
+              isFav ? 'fill-[#E11D48] text-[#E11D48]' : 'text-slate-600 hover:text-[#E11D48]'
             }`}
           />
         </button>
 
-        {/* Стрелочки переключения фото для ПК */}
+        {/* Стрелочки */}
         {photos.length > 1 && (
           <>
             <button
@@ -142,34 +141,28 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onBook }) 
               <MapPin className="w-3.5 h-3.5 mr-1 text-slate-400 flex-shrink-0" />
               <span className="line-clamp-1">{property.address}</span>
             </div>
-            <div className="flex items-center text-slate-600 font-semibold flex-shrink-0 ml-2">
+            <div className="flex items-center text-slate-700 font-bold flex-shrink-0 ml-2">
               <Users className="w-3.5 h-3.5 mr-1 text-blue-600" />
               <span>до {property.max_guests}</span>
             </div>
           </div>
 
           <Link href={`/property/${property.id}`}>
-            <h3 className="text-lg font-bold text-slate-900 mb-2 hover:text-blue-600 transition-colors line-clamp-1">
+            <h3 className="text-base font-bold text-slate-900 mb-2 hover:text-blue-600 transition-colors line-clamp-1">
               {property.title}
             </h3>
           </Link>
 
-          {/* Удобства */}
           <div className="flex flex-wrap gap-1.5 mb-4">
             {property.amenities?.slice(0, 3).map((item, index) => (
               <span
                 key={index}
                 className="inline-flex items-center text-[11px] bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg font-medium"
               >
-                <Check className="w-3 h-3 mr-1 text-emerald-500" />
+                <Check className="w-3 h-3 mr-1 text-teal-600" />
                 {item}
               </span>
             ))}
-            {property.amenities && property.amenities.length > 3 && (
-              <span className="text-[11px] bg-blue-50 text-blue-600 px-2 py-1 rounded-lg font-semibold">
-                +{property.amenities.length - 3} ещё
-              </span>
-            )}
           </div>
         </div>
 
@@ -181,9 +174,10 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onBook }) 
             <span className="text-slate-400 text-xs"> / ночь</span>
           </div>
 
+          {/* Action Button: Teal (Морская волна) */}
           <button
             onClick={() => onBook?.(property)}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-colors cursor-pointer"
+            className="bg-[#0D9488] hover:bg-[#0F766E] text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-md shadow-teal-600/20 active:scale-95 cursor-pointer"
           >
             Забронировать
           </button>
