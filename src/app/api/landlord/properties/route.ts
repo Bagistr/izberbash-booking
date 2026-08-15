@@ -10,12 +10,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Номер телефона обязателен' }, { status: 400 });
     }
 
-    const cleanPhone = phone.trim().replace(/[^0-9+]/g, '');
+    // Извлекаем чистые последние 10 цифр номера (без +7, 8, пробелов и скобок)
+    const rawDigits = phone.replace(/\D/g, '');
+    const clean10Digits = rawDigits.slice(-10);
 
-    // 1. Получаем объекты этого владельца
+    // 1. Ищем объекты владельца по последним 10 цифрам номера
     const properties = await sql`
       SELECT * FROM properties
-      WHERE landlord_phone LIKE ${`%${cleanPhone.slice(-10)}%`}
+      WHERE regexp_replace(landlord_phone, '\D', '', 'g') LIKE ${`%${clean10Digits}`}
       ORDER BY created_at DESC
     `;
 
@@ -37,12 +39,12 @@ export async function GET(request: Request) {
       `;
     }
 
-    // 3. Считаем статистику с комиссией 7% (0.07)
+    // 3. Считаем статистику с комиссией 7%
     const validBookings = bookings.filter((b) => b.status === 'confirmed');
 
     const totalRevenue = validBookings.reduce((acc, b) => acc + Number(b.total_price || 0), 0);
-    const platformCommission = Math.round(totalRevenue * 0.07); // 7% комиссия сервиса
-    const netRevenue = totalRevenue - platformCommission; // 93% доход владельца
+    const platformCommission = Math.round(totalRevenue * 0.07);
+    const netRevenue = totalRevenue - platformCommission;
     const totalGuests = validBookings.reduce((acc, b) => acc + Number(b.guests_count || 1), 0);
 
     const totalDays = validBookings.reduce((acc, b) => acc + Number(b.total_days || 1), 0);
