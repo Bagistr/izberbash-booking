@@ -5,10 +5,13 @@ import { Property } from '@/types/property';
 import { PropertyCard } from '@/components/PropertyCard';
 import { BookingModal } from '@/components/BookingModal';
 import { useFavorites } from '@/context/FavoritesContext';
+import { useAuth } from '@/context/AuthContext';
 import { SlidersHorizontal, Heart, Calendar, Users, RotateCcw } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 interface BookedItem {
   property_id: string;
+  unit_id?: string;
   check_in: string;
   check_out: string;
   status: string;
@@ -17,6 +20,8 @@ interface BookedItem {
 const FILTER_BONUSES = ['Wi-Fi', 'Кондиционер', 'Мангал', 'Бассейн', 'Беседка', 'Парковка', 'Вид на море'];
 
 export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties }) => {
+  const router = useRouter();
+  const { user } = useAuth();
   const { favorites } = useFavorites();
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
 
@@ -31,7 +36,7 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
   const [maxDistance, setMaxDistance] = useState<number>(1000);
   const [selectedBonuses, setSelectedBonuses] = useState<string[]>([]);
 
-  // Загружаем все существующие брони
+  // Загружаем все занятые даты из базы
   const [allBookings, setAllBookings] = useState<BookedItem[]>([]);
 
   useEffect(() => {
@@ -43,7 +48,7 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
           setAllBookings(data || []);
         }
       } catch (e) {
-        console.error('Ошибка загрузки занятых дат:', e);
+        console.error('Ошибка загрузки броней:', e);
       }
     }
     loadBookings();
@@ -55,25 +60,36 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
     );
   };
 
-  // Проверка пересечения дат (start1 < end2 AND end1 > start2)
-  const isPropertyBookedOnDates = (propertyId: string, inDateStr: string, outDateStr: string) => {
-    if (!inDateStr || !outDateStr) return false;
-    const reqIn = new Date(inDateStr).getTime();
-    const reqOut = new Date(outDateStr).getTime();
+  // Точная проверка занятости по датам (YYYY-MM-DD)
+  const isPropertyBookedOnDates = (property: Property, inStr: string, outStr: string) => {
+    if (!inStr || !outStr || inStr >= outStr) return false;
 
-    if (reqOut <= reqIn) return false;
+    // Находим все брони этого объекта
+    const propBookings = allBookings.filter((b) => b.property_id === property.id);
+    if (propBookings.length === 0) return false;
 
-    return allBookings.some((b) => {
-      if (b.property_id !== propertyId) return false;
-      const bIn = new Date(b.check_in.slice(0, 10)).getTime();
-      const bOut = new Date(b.check_out.slice(0, 10)).getTime();
-
-      // Если есть хоть один день пересечения — занято
-      return reqIn < bOut && reqOut > bIn;
+    // Проверяем, есть ли брони, пересекающиеся с запрошенным интервалом
+    // Пересечение: check_in < req_out И check_out > req_in
+    const conflictingBookings = propBookings.filter((b) => {
+      const bIn = b.check_in.slice(0, 10);
+      const bOut = b.check_out.slice(0, 10);
+      return bIn < outStr && bOut > inStr;
     });
+
+    // Если у объекта есть под-юниты (например, 3 домика), проверяем, заняты ли ВСЕ юниты
+    if (property.units && property.units.length > 0) {
+      const bookedUnitIds = new Set(
+        conflictingBookings.map((b) => b.unit_id).filter(Boolean)
+      );
+      // Если все домики заняты — объект недоступен
+      return bookedUnitIds.size >= property.units.length;
+    }
+
+    // Для обычного объекта: если есть хотя бы 1 пересечение — он занят
+    return conflictingBookings.length > 0;
   };
 
-  // Фильтрация объектов
+  // Фильтрация
   const filteredProperties = properties.filter((item) => {
     // 1. Избранное
     if (onlyFavorites && !favorites.includes(item.id)) return false;
@@ -84,10 +100,10 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
     // 3. Вместимость гостей
     if (guestsCount > 1 && item.max_guests < guestsCount) return false;
 
-    // 4. ФИЛЬТР ПО ДАТАМ (Свободен ли дом)
+    // 4. ФИЛЬТР ПО ДАТАМ (Скрываем занятые)
     if (checkInDate && checkOutDate) {
-      if (isPropertyBookedOnDates(item.id, checkInDate, checkOutDate)) {
-        return false; // Исключаем забронированный объект
+      if (isPropertyBookedOnDates(item, checkInDate, checkOutDate)) {
+        return false;
       }
     }
 
@@ -98,7 +114,7 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
     // 6. Расстояние до моря
     if (item.distance_to_sea > maxDistance) return false;
 
-    // 7. Бонусы и удобства
+    // 7. Бонусы
     if (selectedBonuses.length > 0) {
       const hasAll = selectedBonuses.every((b) => item.amenities?.includes(b));
       if (!hasAll) return false;
@@ -106,6 +122,14 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
 
     return true;
   });
+
+  const handleFavoritesClick = () => {
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+    setOnlyFavorites(!onlyFavorites);
+  };
 
   const resetFilters = () => {
     setTypeFilter('all');
@@ -130,10 +154,10 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
           </div>
 
           <div className="flex items-center space-x-2">
-            {/* Кнопка фильтра «Только избранное» */}
+            {/* Кнопка «Только избранное» */}
             <button
               type="button"
-              onClick={() => setOnlyFavorites(!onlyFavorites)}
+              onClick={handleFavoritesClick}
               className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer ${
                 onlyFavorites
                   ? 'bg-rose-50 text-rose-600 border border-rose-200 shadow-sm'
@@ -307,11 +331,11 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
         </div>
       </div>
 
-      {/* КАТАЛОГ ОБЪЕКТОВ */}
+      {/* ЗАГОЛОВОК ВЫДАЧИ */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl sm:text-2xl font-black text-slate-900">
           {checkInDate && checkOutDate ? (
-            <span>Свободные варианты на ваши даты ({filteredProperties.length})</span>
+            <span>Свободные варианты с {checkInDate} по {checkOutDate} ({filteredProperties.length})</span>
           ) : (
             <span>Доступные варианты ({filteredProperties.length})</span>
           )}
@@ -325,7 +349,7 @@ export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties 
           </p>
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
             {onlyFavorites
-              ? 'Нажимайте на сердечко в углу карточки объявления, чтобы добавить его сюда.'
+              ? 'Нажимайте на сердечко на карточке любого объявления, чтобы сохранить его в свой профиль.'
               : 'Попробуйте изменить даты заезда или сбросить фильтры.'}
           </p>
           <button

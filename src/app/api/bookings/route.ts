@@ -1,6 +1,27 @@
 import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 
+// Метод получения активных броней для фильтра по датам
+export async function GET() {
+  try {
+    const rows = await sql`
+      SELECT 
+        property_id, 
+        unit_id, 
+        TO_CHAR(check_in, 'YYYY-MM-DD') as check_in, 
+        TO_CHAR(check_out, 'YYYY-MM-DD') as check_out, 
+        status 
+      FROM bookings 
+      WHERE status IN ('new', 'confirmed', 'blocked')
+    `;
+    return NextResponse.json(rows);
+  } catch (error) {
+    console.error('Ошибка получения броней:', error);
+    return NextResponse.json([], { status: 500 });
+  }
+}
+
+// Создание бронирования
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -24,16 +45,26 @@ export async function POST(request: Request) {
       );
     }
 
+    const cleanPhone = guest_phone.trim().replace(/[^0-9+]/g, '');
+
     await sql`
       INSERT INTO bookings (
         property_id, unit_id, check_in, check_out, total_days, 
-        total_price, guest_name, guest_phone, guest_telegram, 
+        total_price, guest_name, guest_phone, guest_phone_normalized, guest_telegram, 
         guests_count, status
       )
       VALUES (
-        ${property_id}, ${unit_id || null}, ${check_in}, ${check_out}, 
-        ${Number(total_days)}, ${Number(total_price)}, ${guest_name}, 
-        ${guest_phone}, ${guest_telegram || ''}, ${Number(guests_count) || 1}, 
+        ${property_id}::uuid, 
+        ${unit_id ? sql`${unit_id}::uuid` : null}, 
+        ${check_in}::date, 
+        ${check_out}::date, 
+        ${Number(total_days)}, 
+        ${Number(total_price)}, 
+        ${guest_name}, 
+        ${guest_phone}, 
+        ${cleanPhone},
+        ${guest_telegram || ''}, 
+        ${Number(guests_count) || 1}, 
         'confirmed'
       )
     `;

@@ -2,9 +2,11 @@
 
 import React, { useState, TouchEvent } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { MapPin, Check, ChevronLeft, ChevronRight, Heart, Users } from 'lucide-react';
 import { Property } from '@/types/property';
 import { useFavorites } from '@/context/FavoritesContext';
+import { useAuth } from '@/context/AuthContext';
 
 interface PropertyCardProps {
   property: Property;
@@ -12,6 +14,8 @@ interface PropertyCardProps {
 }
 
 export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onBook }) => {
+  const router = useRouter();
+  const { user } = useAuth();
   const { isFavorite, toggleFavorite } = useFavorites();
   const isFav = isFavorite(property.id);
 
@@ -52,10 +56,17 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onBook }) 
     setTouchStartX(null);
   };
 
-  const handleHeartClick = (e: React.MouseEvent) => {
+  const handleHeartClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    toggleFavorite(property.id);
+
+    // Если не вошел — перенаправляем на авторизацию
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+
+    await toggleFavorite(property.id);
   };
 
   return (
@@ -79,12 +90,12 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onBook }) 
           {property.distance_to_sea} м до моря
         </div>
 
-        {/* КНОПКА-СЕРДЕЧКО В ПРАВОМ ВЕРХНЕМ УГЛУ */}
+        {/* КНОПКА-СЕРДЕЧКО */}
         <button
           type="button"
           onClick={handleHeartClick}
           className="absolute top-3 right-3 p-2.5 rounded-full bg-white/90 hover:bg-white backdrop-blur-md transition-all shadow-md z-20 cursor-pointer hover:scale-110 active:scale-95"
-          title={isFav ? 'Удалить из избранного' : 'Добавить в избранное'}
+          title={user ? (isFav ? 'Удалить из избранного' : 'Добавить в избранное') : 'Войдите, чтобы сохранить в избранное'}
         >
           <Heart
             className={`w-5 h-5 transition-colors ${
