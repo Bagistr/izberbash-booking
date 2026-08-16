@@ -2,23 +2,30 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { Property } from '@/types/property';
 import { BookingModal } from '@/components/BookingModal';
+import { useFavorites } from '@/context/FavoritesContext';
+import { useAuth } from '@/context/AuthContext';
 import {
   Waves, ArrowLeft, MapPin, Users, Check, ShieldCheck,
-  Maximize2, X, ChevronLeft, ChevronRight
+  X, ChevronLeft, ChevronRight, Share2, Heart, Star, Grid
 } from 'lucide-react';
 
 export default function PropertyDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const id = params?.id as string;
+
+  const { user } = useAuth();
+  const { isFavorite, toggleFavorite } = useFavorites();
 
   const [property, setProperty] = useState<Property | null>(null);
   const [loading, setLoading] = useState(true);
   const [isBookingOpen, setIsBookingOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  // Состояние полноэкранного просмотра фото
+  // Полноэкранная галерея (Lightbox)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   useEffect(() => {
@@ -26,14 +33,14 @@ export default function PropertyDetailPage() {
 
     async function loadProperty() {
       try {
-        const res = await fetch(`/api/properties`);
+        const res = await fetch('/api/properties');
         if (res.ok) {
           const list: Property[] = await res.json();
           const found = list.find((p) => String(p.id) === String(id));
           setProperty(found || null);
         }
       } catch (err) {
-        console.error('Ошибка загрузки данных объекта:', err);
+        console.error('Ошибка загрузки объекта:', err);
       } finally {
         setLoading(false);
       }
@@ -54,7 +61,7 @@ export default function PropertyDetailPage() {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
         <h1 className="text-2xl font-bold text-slate-800 mb-2">Объект не найден</h1>
-        <p className="text-sm text-slate-500 mb-4">Возможно, объявление было удалено или перемещено.</p>
+        <p className="text-sm text-slate-500 mb-4">Возможно, объявление было удалено.</p>
         <Link href="/" className="bg-blue-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl">
           Вернуться в каталог
         </Link>
@@ -66,6 +73,24 @@ export default function PropertyDetailPage() {
     property.photos && property.photos.length > 0
       ? property.photos
       : ['https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=1000&q=80'];
+
+  const isFav = isFavorite(property.id);
+
+  const handleHeartClick = async () => {
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+    await toggleFavorite(property.id);
+  };
+
+  const handleShare = () => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   const prevPhoto = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -101,54 +126,133 @@ export default function PropertyDetailPage() {
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-4 pt-8">
-        {/* Заголовок и адрес */}
-        <div className="mb-6">
-          <span className="inline-block bg-blue-100 text-blue-800 text-xs font-bold px-3 py-1 rounded-full mb-2">
-            {property.property_type === 'house' ? 'Коттедж / Дом' : 'Номер в отеле'}
-          </span>
-          <h1 className="text-3xl sm:text-4xl font-black text-slate-900 mb-2">{property.title}</h1>
-          <div className="flex items-center text-slate-600 text-sm">
-            <MapPin className="w-4 h-4 mr-1 text-blue-600" />
-            <span>{property.address}</span>
-            <span className="mx-2">•</span>
-            <span className="font-semibold text-blue-700">{property.distance_to_sea} м до моря</span>
-          </div>
-        </div>
+      <div className="max-w-6xl mx-auto px-4 pt-6">
+        {/* ВЕРХНЯЯ ЧАСТЬ: Заголовок, действия и инфо-строка */}
+        <div className="space-y-2 mb-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+              {property.title}
+            </h1>
 
-        {/* Галерея кликабельных фотографий с зумом */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
-          <div
-            onClick={() => setLightboxIndex(0)}
-            className="md:col-span-2 h-[350px] sm:h-[450px] rounded-3xl overflow-hidden border border-slate-200 shadow-sm relative group cursor-pointer"
-          >
-            <img src={photos[0]} alt={property.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
-            <div className="absolute inset-0 bg-slate-900/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-sm space-x-2 backdrop-blur-[2px]">
-              <Maximize2 className="w-5 h-5" />
-              <span>Нажмите для увеличения</span>
+            <div className="flex items-center space-x-2">
+              {/* Поделиться */}
+              <button
+                type="button"
+                onClick={handleShare}
+                className="inline-flex items-center space-x-1.5 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold px-3 py-2 rounded-xl border border-slate-200 shadow-sm transition-all cursor-pointer"
+              >
+                <Share2 className="w-4 h-4 text-slate-500" />
+                <span>{copied ? 'Ссылка скопирована!' : 'Поделиться'}</span>
+              </button>
+
+              {/* В избранное */}
+              <button
+                type="button"
+                onClick={handleHeartClick}
+                className={`inline-flex items-center space-x-1.5 text-xs font-bold px-3 py-2 rounded-xl border transition-all shadow-sm cursor-pointer ${
+                  isFav
+                    ? 'bg-rose-50 border-rose-200 text-rose-600'
+                    : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-700'
+                }`}
+              >
+                <Heart className={`w-4 h-4 ${isFav ? 'fill-rose-500 text-rose-500' : 'text-slate-500'}`} />
+                <span>{isFav ? 'В избранном' : 'В избранное'}</span>
+              </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-1 gap-4 h-[350px] sm:h-[450px]">
-            {photos.slice(1, 3).map((photo, index) => (
-              <div
-                key={index}
-                onClick={() => setLightboxIndex(index + 1)}
-                className="h-full rounded-2xl overflow-hidden border border-slate-200 shadow-sm relative group cursor-pointer"
-              >
-                <img src={photo} alt={`${property.title} - ${index + 2}`} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
-                <div className="absolute inset-0 bg-slate-900/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-xs space-x-1 backdrop-blur-[2px]">
-                  <Maximize2 className="w-4 h-4" />
-                  <span>Увеличить</span>
-                </div>
-              </div>
-            ))}
+          {/* Инфо-строка */}
+          <div className="flex flex-wrap items-center text-xs sm:text-sm text-slate-600 font-medium gap-y-1">
+            <div className="flex items-center text-slate-900 font-bold mr-2">
+              <Star className="w-4 h-4 text-amber-500 fill-amber-500 mr-1" />
+              <span>4.95</span>
+              <span className="text-slate-500 font-normal ml-1">(18 отзывов)</span>
+            </div>
+            <span className="mx-2 text-slate-300 hidden sm:inline">•</span>
+            <div className="flex items-center">
+              <MapPin className="w-3.5 h-3.5 mr-1 text-slate-400" />
+              <span>{property.address}</span>
+            </div>
+            <span className="mx-2 text-slate-300">•</span>
+            <span className="font-semibold text-blue-600">{property.distance_to_sea}м до моря</span>
           </div>
         </div>
 
-        {/* Основная информация */}
+        {/* ГАЛЕРЕЯ ФОТОГРАФИЙ (1 большое фото 50% + 3 горизонтальных справа) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-10 h-[320px] sm:h-[420px] rounded-3xl overflow-hidden shadow-sm">
+          {/* Главное большое фото (50% ширины) */}
+          <div
+            onClick={() => setLightboxIndex(0)}
+            className="relative h-full overflow-hidden cursor-pointer group bg-slate-100"
+          >
+            <img
+              src={photos[0]}
+              alt={`${property.title} - Главное фото`}
+              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            />
+            <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
+
+          {/* Правая колонка из 3 горизонтальных фото */}
+          <div className="grid grid-rows-3 gap-3 h-full">
+            {/* Фото 2 */}
+            <div
+              onClick={() => setLightboxIndex(1 % photos.length)}
+              className="relative h-full overflow-hidden cursor-pointer group bg-slate-100 rounded-tr-2xl md:rounded-tr-none"
+            >
+              <img
+                src={photos[1] || photos[0]}
+                alt={`${property.title} - Фото 2`}
+                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+              />
+              <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+
+            {/* Фото 3 */}
+            <div
+              onClick={() => setLightboxIndex(2 % photos.length)}
+              className="relative h-full overflow-hidden cursor-pointer group bg-slate-100"
+            >
+              <img
+                src={photos[2] || photos[0]}
+                alt={`${property.title} - Фото 3`}
+                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+              />
+              <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+
+            {/* Фото 4 с кнопкой "Все фото" */}
+            <div
+              onClick={() => setLightboxIndex(3 < photos.length ? 3 : 0)}
+              className="relative h-full overflow-hidden cursor-pointer group bg-slate-100"
+            >
+              <img
+                src={photos[3] || photos[0]}
+                alt={`${property.title} - Фото 4`}
+                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+              />
+              <div className="absolute inset-0 bg-black/20 group-hover:bg-black/30 transition-colors" />
+
+              {/* Плашка «Все N фото» */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxIndex(0);
+                }}
+                className="absolute bottom-3 right-3 bg-white/95 hover:bg-white text-slate-900 text-xs font-bold px-3.5 py-2 rounded-xl shadow-lg border border-slate-200/80 flex items-center space-x-1.5 transition-all hover:scale-105 active:scale-95"
+              >
+                <Grid className="w-3.5 h-3.5 text-slate-700" />
+                <span>Все {photos.length} фото</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* НИЖНЯЯ ЧАСТЬ (Оригинальный дизайн: Описание, Удобства и Карточка бронирования) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-8">
+            {/* Об объекте */}
             <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm">
               <h2 className="text-xl font-bold text-slate-900 mb-4">Об объекте</h2>
               <p className="text-slate-600 leading-relaxed whitespace-pre-line text-sm sm:text-base">
@@ -163,6 +267,7 @@ export default function PropertyDetailPage() {
               </div>
             </div>
 
+            {/* Удобства и бонусы */}
             <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm">
               <h2 className="text-xl font-bold text-slate-900 mb-4">Удобства и бонусы</h2>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -176,7 +281,7 @@ export default function PropertyDetailPage() {
             </div>
           </div>
 
-          {/* Карточка бронирования */}
+          {/* Карточка стоимости и бронирования */}
           <div>
             <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-lg sticky top-24 space-y-6">
               <div>
