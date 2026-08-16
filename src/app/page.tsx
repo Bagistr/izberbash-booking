@@ -69,14 +69,14 @@ export default async function HomePage() {
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <PropertyList properties={properties} />
       </section>
-      
+
       {/* ПОДВАЛ САЙТА С ЮРИДИЧЕСКИМИ ССЫЛКАМИ */}
       <footer className="bg-white border-t border-slate-200 mt-20 py-10 w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-500">
           <div>
             <p className="font-bold text-slate-800">© 2026 Райский Пляж. Все права защищены.</p>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              Индивидуальный предприниматель Джабраилов Багаудин Казимагомедович • ИНН 056002553388[cite: 2]
+              Индивидуальный предприниматель Ибрагимов Завур Абдурагимович • ИНН 056002553388
             </p>
           </div>
 
@@ -88,7 +88,7 @@ export default async function HomePage() {
               Политика конфиденциальности
             </Link>
             <a href="mailto:Baga1071@yandex.ru" className="font-semibold hover:text-blue-600 transition-colors">
-              Поддержка: Baga1071@yandex.ru[cite: 2]
+              Поддержка: Baga1071@yandex.ru
             </a>
           </div>
         </div>
