@@ -77,7 +77,7 @@ export default async function HomePage() {
         {/* Копирайт и реквизиты */}
         <div>
           <p className="font-bold text-slate-700">© 2026 Райский Пляж. Все права защищены.</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">ИП Джабраилов Б. К. • ИНН 056002553388</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">ИП Ибрагимов З.А. • ИНН 056002553388</p>
         </div>
 
         {/* Юридические ссылки для Robokassa */}
@@ -86,10 +86,10 @@ export default async function HomePage() {
             Публичная оферта
           </Link>
           <Link href="/offer" className="hover:text-blue-600 underline transition-colors">
-            Политика конфиденциальности[cite: 2]
+            Политика конфиденциальности
           </Link>
           <a href="mailto:Baga1071@yandex.ru" className="hover:text-blue-600 transition-colors">
-            Поддержка: Baga1071@yandex.ru[cite: 2]
+            Поддержка: Baga1071@yandex.ru
           </a>
         </div>
 
