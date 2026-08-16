@@ -70,29 +70,31 @@ export default async function HomePage() {
         <PropertyList properties={properties} />
       </section>
 
-      {/* ПОДВАЛ САЙТА С ЮРИДИЧЕСКИМИ ССЫЛКАМИ */}
-      <footer className="bg-white border-t border-slate-200 mt-20 py-10 w-full">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <div>
-            <p className="font-bold text-slate-800">© 2026 Райский Пляж. Все права защищены.</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">
-              Индивидуальный предприниматель Ибрагимов Завур Абдурагимович • ИНН 056002553388
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-6">
-            <Link href="/offer" className="font-semibold hover:text-blue-600 underline transition-colors">
-              Публичная оферта
-            </Link>
-            <Link href="/offer" className="font-semibold hover:text-blue-600 underline transition-colors">
-              Политика конфиденциальности
-            </Link>
-            <a href="mailto:Baga1071@yandex.ru" className="font-semibold hover:text-blue-600 transition-colors">
-              Поддержка: Baga1071@yandex.ru
-            </a>
-          </div>
+    {/* ПОДВАЛ САЙТА (FOOTER) */}
+    <footer className="bg-white border-t border-slate-200 mt-20 py-10">
+      <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+          
+        {/* Копирайт и реквизиты */}
+        <div>
+          <p className="font-bold text-slate-700">© 2026 Райский Пляж. Все права защищены.</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">ИП Джабраилов Б. К. • ИНН 056002553388</p>
         </div>
-      </footer>
+
+        {/* Юридические ссылки для Robokassa */}
+        <div className="flex items-center space-x-6">
+          <Link href="/offer" className="hover:text-blue-600 underline transition-colors">
+            Публичная оферта
+          </Link>
+          <Link href="/offer" className="hover:text-blue-600 underline transition-colors">
+            Политика конфиденциальности[cite: 2]
+          </Link>
+          <a href="mailto:Baga1071@yandex.ru" className="hover:text-blue-600 transition-colors">
+            Поддержка: Baga1071@yandex.ru[cite: 2]
+          </a>
+        </div>
+
+      </div>
+    </footer>
     </main>
   );
 }
