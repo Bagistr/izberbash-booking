@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     const clean10 = phone.replace(/\D/g, '').slice(-10);
     const standardPhone = `8${clean10}`;
 
-    // 1. ВХОД УЖЕ ЗАРЕГИСТРИРОВАННОГО ПОЛЬЗОВАТЕЛЯ (Без SMS и без Telegram)
+    // 1. ВХОД (Login)
     if (action === 'login') {
       const users = await sql`
         SELECT * FROM users
@@ -23,14 +23,13 @@ export async function POST(request: Request) {
 
       if (users.length === 0) {
         return NextResponse.json(
-          { error: 'Пользователь с таким номером не найден. Пожалуйста, зарегистрируйтесь.' },
+          { error: 'Пользователь не найден. Пожалуйста, зарегистрируйтесь.' },
           { status: 404 }
         );
       }
 
       const user = users[0];
 
-      // Проверка пароля (если пароль сохранен в базе)
       if (user.password && user.password !== password) {
         return NextResponse.json({ error: 'Неверный пароль' }, { status: 401 });
       }
@@ -46,7 +45,7 @@ export async function POST(request: Request) {
       });
     }
 
-    // 2. РЕГИСТРАЦИЯ НОВОГО ПОЛЬЗОВАТЕЛЯ (Строго с проверкой 4-значного кода)
+    // 2. РЕГИСТРАЦИЯ (Register)
     if (action === 'register') {
       if (!name || !name.trim()) {
         return NextResponse.json({ error: 'Укажите ваше имя' }, { status: 400 });
@@ -56,10 +55,10 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Введите 4-значный код подтверждения' }, { status: 400 });
       }
 
-      // Проверяем валидность кода
+      // Поиск кода по последним 10 цифрам номера
       const validCodes = await sql`
         SELECT id FROM phone_verification_codes
-        WHERE phone = ${standardPhone}
+        WHERE regexp_replace(phone, '\D', '', 'g') LIKE ${`%${clean10}`}
           AND code = ${code.trim()}
           AND verified = FALSE
           AND expires_at > NOW()
@@ -74,14 +73,14 @@ export async function POST(request: Request) {
         );
       }
 
-      // Гасим использованный код
+      // Помечаем код как использованный
       await sql`
         UPDATE phone_verification_codes
         SET verified = TRUE
         WHERE id = ${validCodes[0].id}::uuid
       `;
 
-      // Проверяем наличие пользователя или создаем нового
+      // Проверяем существование пользователя
       const existing = await sql`
         SELECT * FROM users
         WHERE regexp_replace(phone, '\D', '', 'g') LIKE ${`%${clean10}`}
@@ -90,19 +89,20 @@ export async function POST(request: Request) {
 
       let createdUser;
       if (existing.length > 0) {
-        await sql`
+        const updateRes = await sql`
           UPDATE users
           SET name = ${name}, password = ${password}, role = ${role || 'guest'}
           WHERE id = ${existing[0].id}::uuid
+          RETURNING *
         `;
-        createdUser = { ...existing[0], name, role: role || 'guest' };
+        createdUser = updateRes[0];
       } else {
-        const res = await sql`
+        const insertRes = await sql`
           INSERT INTO users (name, phone, password, role)
           VALUES (${name}, ${standardPhone}, ${password}, ${role || 'guest'})
           RETURNING *
         `;
-        createdUser = res[0];
+        createdUser = insertRes[0];
       }
 
       return NextResponse.json({
@@ -119,6 +119,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Неизвестное действие' }, { status: 400 });
   } catch (err) {
     console.error('Ошибка авторизации:', err);
-    return NextResponse.json({ error: 'Ошибка сервера' }, { status: 500 });
+    return NextResponse.json({ error: 'Ошибка сервера при регистрации' }, { status: 500 });
   }
 }
