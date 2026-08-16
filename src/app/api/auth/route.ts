@@ -3,51 +3,122 @@ import { sql } from '@/lib/db';
 
 export async function POST(request: Request) {
   try {
-    const { action, name, phone, password, role } = await request.json();
-    const cleanPhone = phone?.trim().replace(/[^0-9+]/g, '');
+    const body = await request.json();
+    const { action, name, phone, password, role, code } = body;
 
-    if (!cleanPhone || !password) {
-      return NextResponse.json({ error: 'Укажите телефон и пароль' }, { status: 400 });
+    if (!phone || !password) {
+      return NextResponse.json({ error: 'Заполните номер телефона и пароль' }, { status: 400 });
     }
 
-    const userRole = role || 'guest'; // 'guest' или 'landlord'
+    const clean10 = phone.replace(/\D/g, '').slice(-10);
+    const standardPhone = `8${clean10}`;
 
+    // 1. ВХОД УЖЕ ЗАРЕГИСТРИРОВАННОГО ПОЛЬЗОВАТЕЛЯ (Без SMS и без Telegram)
+    if (action === 'login') {
+      const users = await sql`
+        SELECT * FROM users
+        WHERE regexp_replace(phone, '\D', '', 'g') LIKE ${`%${clean10}`}
+        LIMIT 1
+      `;
+
+      if (users.length === 0) {
+        return NextResponse.json(
+          { error: 'Пользователь с таким номером не найден. Пожалуйста, зарегистрируйтесь.' },
+          { status: 404 }
+        );
+      }
+
+      const user = users[0];
+
+      // Проверка пароля (если пароль сохранен в базе)
+      if (user.password && user.password !== password) {
+        return NextResponse.json({ error: 'Неверный пароль' }, { status: 401 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        user: {
+          id: user.id,
+          name: user.name,
+          phone: standardPhone,
+          role: user.role || role || 'guest',
+        },
+      });
+    }
+
+    // 2. РЕГИСТРАЦИЯ НОВОГО ПОЛЬЗОВАТЕЛЯ (Строго с проверкой 4-значного кода)
     if (action === 'register') {
-      const existing = await sql`SELECT id FROM users WHERE phone = ${cleanPhone}`;
-      if (existing && existing.length > 0) {
-        return NextResponse.json({ error: 'Пользователь с таким номером уже существует' }, { status: 400 });
+      if (!name || !name.trim()) {
+        return NextResponse.json({ error: 'Укажите ваше имя' }, { status: 400 });
       }
 
-      const rows = await sql`
-        INSERT INTO users (name, phone, password_hash, role)
-        VALUES (${name || 'Пользователь'}, ${cleanPhone}, ${password}, ${userRole})
-        RETURNING id, name, phone, role
-      `;
-
-      return NextResponse.json({ success: true, user: rows[0] });
-    } else {
-      // Вход (Login)
-      const rows = await sql`
-        SELECT id, name, phone, password_hash, role 
-        FROM users 
-        WHERE phone = ${cleanPhone}
-      `;
-
-      if (!rows || rows.length === 0 || rows[0].password_hash !== password) {
-        return NextResponse.json({ error: 'Неверный номер телефона или пароль' }, { status: 401 });
+      if (!code || code.trim().length !== 4) {
+        return NextResponse.json({ error: 'Введите 4-значный код подтверждения' }, { status: 400 });
       }
 
-      const user = {
-        id: rows[0].id,
-        name: rows[0].name,
-        phone: rows[0].phone,
-        role: rows[0].role,
-      };
+      // Проверяем валидность кода
+      const validCodes = await sql`
+        SELECT id FROM phone_verification_codes
+        WHERE phone = ${standardPhone}
+          AND code = ${code.trim()}
+          AND verified = FALSE
+          AND expires_at > NOW()
+        ORDER BY created_at DESC
+        LIMIT 1
+      `;
 
-      return NextResponse.json({ success: true, user });
+      if (validCodes.length === 0) {
+        return NextResponse.json(
+          { error: 'Неверный или просроченный код подтверждения' },
+          { status: 400 }
+        );
+      }
+
+      // Гасим использованный код
+      await sql`
+        UPDATE phone_verification_codes
+        SET verified = TRUE
+        WHERE id = ${validCodes[0].id}::uuid
+      `;
+
+      // Проверяем наличие пользователя или создаем нового
+      const existing = await sql`
+        SELECT * FROM users
+        WHERE regexp_replace(phone, '\D', '', 'g') LIKE ${`%${clean10}`}
+        LIMIT 1
+      `;
+
+      let createdUser;
+      if (existing.length > 0) {
+        await sql`
+          UPDATE users
+          SET name = ${name}, password = ${password}, role = ${role || 'guest'}
+          WHERE id = ${existing[0].id}::uuid
+        `;
+        createdUser = { ...existing[0], name, role: role || 'guest' };
+      } else {
+        const res = await sql`
+          INSERT INTO users (name, phone, password, role)
+          VALUES (${name}, ${standardPhone}, ${password}, ${role || 'guest'})
+          RETURNING *
+        `;
+        createdUser = res[0];
+      }
+
+      return NextResponse.json({
+        success: true,
+        user: {
+          id: createdUser.id,
+          name: createdUser.name,
+          phone: standardPhone,
+          role: createdUser.role,
+        },
+      });
     }
+
+    return NextResponse.json({ error: 'Неизвестное действие' }, { status: 400 });
   } catch (err) {
-    console.error('Ошибка аутентификации:', err);
+    console.error('Ошибка авторизации:', err);
     return NextResponse.json({ error: 'Ошибка сервера' }, { status: 500 });
   }
 }
