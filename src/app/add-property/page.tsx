@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { Waves, ArrowLeft, Building2, X, CheckCircle2, ImagePlus, Plus, Home, Trash2, Layers, Check } from 'lucide-react';
+import { Waves, ArrowLeft, Building2, X, CheckCircle2, ImagePlus, Plus, Trash2, Layers, Check, Home } from 'lucide-react';
+import { ImageCropperModal } from '@/components/ImageCropperModal';
 
 const PRESET_AMENITIES = [
   'Wi-Fi', 'Кондиционер', 'Мангал', 'Бассейн', 'Беседка', 
@@ -11,7 +12,6 @@ const PRESET_AMENITIES = [
 ];
 
 export default function AddPropertyPage() {
-  // Выбор формата: 'single' (один отдельный дом) или 'complex' (база отдыха / гостиница с номерами)
   const [listingFormat, setListingFormat] = useState<'single' | 'complex'>('single');
 
   const [formData, setFormData] = useState({
@@ -25,7 +25,6 @@ export default function AddPropertyPage() {
     landlord_phone: '',
   });
 
-  // Список домиков/номеров (используется только для формата 'complex')
   const [units, setUnits] = useState<string[]>(['Домик №1', 'Домик №2']);
   const [newUnitName, setNewUnitName] = useState('');
 
@@ -34,11 +33,21 @@ export default function AddPropertyPage() {
   ]);
   const [customAmenitiesList, setCustomAmenitiesList] = useState<string[]>([]);
   const [customAmenity, setCustomAmenity] = useState('');
+  
+  // Фотографии
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Состояния для кадрирования
+  const [pendingFileQueue, setPendingFileQueue] = useState<File[]>([]);
+  const [currentCroppingImage, setCurrentCroppingImage] = useState<{
+    url: string;
+    width: number;
+    height: number;
+  } | null>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -64,7 +73,6 @@ export default function AddPropertyPage() {
     setCustomAmenity('');
   };
 
-  // Управление домиками/номерами для комплекса
   const addUnit = () => {
     if (newUnitName.trim()) {
       setUnits((prev) => [...prev, newUnitName.trim()]);
@@ -82,28 +90,45 @@ export default function AddPropertyPage() {
     setUnits((prev) => prev.filter((_, idx) => idx !== index));
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 1. При выборе файлов открываем первый файл в кроппере
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+
+    const fileList = Array.from(files);
+    const firstFile = fileList[0];
+    const remaining = fileList.slice(1);
+
+    setPendingFileQueue(remaining);
+    openCropForFile(firstFile);
+    e.target.value = '';
+  };
+
+  const openCropForFile = (file: File) => {
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      setCurrentCroppingImage({
+        url: objectUrl,
+        width: img.width,
+        height: img.height,
+      });
+    };
+    img.src = objectUrl;
+  };
+
+  // 2. После кадрирования одного файла отправляем WebP в Cloudinary
+  const handleCropComplete = async (croppedWebpFile: File) => {
+    setCurrentCroppingImage(null);
+    setUploading(true);
 
     const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
     const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
 
-    if (!cloudName || !uploadPreset) {
-      setErrorMsg('Настройка загрузки фото еще не завершена в .env.local');
-      return;
-    }
-
-    setUploading(true);
-    setErrorMsg('');
-
-    const newUploadedPhotos: string[] = [];
-
-    try {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+    if (cloudName && uploadPreset) {
+      try {
         const data = new FormData();
-        data.append('file', file);
+        data.append('file', croppedWebpFile);
         data.append('upload_preset', uploadPreset);
 
         const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
@@ -111,17 +136,29 @@ export default function AddPropertyPage() {
           body: data,
         });
 
-        if (!res.ok) throw new Error('Ошибка загрузки');
-
-        const fileData = await res.json();
-        newUploadedPhotos.push(fileData.secure_url);
+        if (res.ok) {
+          const fileData = await res.json();
+          setPhotos((prev) => [...prev, fileData.secure_url]);
+        }
+      } catch (err) {
+        console.error('Ошибка загрузки в Cloudinary:', err);
       }
+    } else {
+      // Fallback на DataURL если переменные окружения не заданы
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPhotos((prev) => [...prev, reader.result as string]);
+      };
+      reader.readAsDataURL(croppedWebpFile);
+    }
 
-      setPhotos((prev) => [...prev, ...newUploadedPhotos]);
-    } catch (err) {
-      setErrorMsg('Не удалось загрузить фотографии.');
-    } finally {
-      setUploading(false);
+    setUploading(false);
+
+    // Если в очереди есть еще файлы, открываем следующий на кадрирование
+    if (pendingFileQueue.length > 0) {
+      const nextFile = pendingFileQueue[0];
+      setPendingFileQueue((prev) => prev.slice(1));
+      openCropForFile(nextFile);
     }
   };
 
@@ -140,7 +177,6 @@ export default function AddPropertyPage() {
       return;
     }
 
-    // Если одиночный объект — передаем 1 дефолтный юнит, если комплекс — массив выбранных юнитов
     const finalUnits = listingFormat === 'single' ? ['Основной объект'] : units;
 
     try {
@@ -169,7 +205,7 @@ export default function AddPropertyPage() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 pb-16">
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center space-x-2">
             <div className="bg-blue-600 p-2 rounded-xl text-white">
@@ -192,7 +228,7 @@ export default function AddPropertyPage() {
             <div className="text-center py-8 space-y-4">
               <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto" />
               <h2 className="text-2xl font-black text-slate-900">Объект успешно добавлен!</h2>
-              <p className="text-slate-600 text-sm">Ваше объявление опубликовано в каталоге DagBooking.</p>
+              <p className="text-slate-600 text-sm">Ваше объявление опубликовано в каталоге с идеальными пропорциями фото.</p>
               <Link href="/" className="inline-block bg-blue-600 text-white font-bold py-3 px-8 rounded-xl hover:bg-blue-700 transition-colors">
                 Посмотреть в каталоге
               </Link>
@@ -205,7 +241,7 @@ export default function AddPropertyPage() {
                   <span>Партнерам и владельцам</span>
                 </div>
                 <h1 className="text-3xl font-black text-slate-900">Сдать жилье</h1>
-                <p className="text-xs text-slate-500 mt-1">Заполните параметры вашего объекта для публикации</p>
+                <p className="text-xs text-slate-500 mt-1">Заполните параметры и добавьте кадрированные фотографии</p>
               </div>
 
               {errorMsg && (
@@ -213,7 +249,7 @@ export default function AddPropertyPage() {
               )}
 
               <form onSubmit={handleSubmit} className="space-y-6">
-                {/* 1. ПЕРЕКЛЮЧАТЕЛЬ: ОДИН ОБЪЕКТ ИЛИ КОМПЛЕКС */}
+                {/* ВЫБОР ФОРМАТА */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-2">
                     Что вы сдаете? *
@@ -221,10 +257,7 @@ export default function AddPropertyPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <button
                       type="button"
-                      onClick={() => {
-                        setListingFormat('single');
-                        setFormData((prev) => ({ ...prev, property_type: 'house' }));
-                      }}
+                      onClick={() => setListingFormat('single')}
                       className={`p-4 rounded-2xl border text-left transition-all flex flex-col justify-between ${
                         listingFormat === 'single'
                           ? 'border-blue-600 bg-blue-50/60 ring-2 ring-blue-500/20'
@@ -239,16 +272,13 @@ export default function AddPropertyPage() {
                       </div>
                       <div>
                         <h4 className="text-sm font-bold text-slate-900">Отдельный дом / коттедж</h4>
-                        <p className="text-[11px] text-slate-500 mt-0.5">Один объект целиком под одного арендатора</p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">Один объект целиком</p>
                       </div>
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => {
-                        setListingFormat('complex');
-                        setFormData((prev) => ({ ...prev, property_type: 'house' }));
-                      }}
+                      onClick={() => setListingFormat('complex')}
                       className={`p-4 rounded-2xl border text-left transition-all flex flex-col justify-between ${
                         listingFormat === 'complex'
                           ? 'border-blue-600 bg-blue-50/60 ring-2 ring-blue-500/20'
@@ -278,29 +308,22 @@ export default function AddPropertyPage() {
                     type="text"
                     name="title"
                     required
-                    placeholder={
-                      listingFormat === 'single'
-                        ? 'Пример: Уютный коттедж у моря с мангалом'
-                        : 'Пример: База отдыха «Каспийский берег»'
-                    }
+                    placeholder="Пример: Коттедж «Черная жемчужина»"
                     value={formData.title}
                     onChange={handleChange}
                     className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
-                {/* БЛОК ДОМИКОВ/НОМЕРОВ (ПОКАЗЫВАЕТСЯ ТОЛЬКО ПРИ ВЫБОРЕ КОМПЛЕКСА) */}
+                {/* БЛОК ДОМИКОВ ДЛЯ КОМПЛЕКСА */}
                 {listingFormat === 'complex' && (
                   <div className="p-4 bg-blue-50/60 border border-blue-100 rounded-2xl space-y-3">
                     <div className="flex items-center space-x-2">
                       <Layers className="w-4 h-4 text-blue-600" />
                       <label className="text-xs font-bold text-slate-800 uppercase">
-                        Домики / Номера в этом комплексе ({units.length})
+                        Домики / Номера ({units.length})
                       </label>
                     </div>
-                    <p className="text-[11px] text-slate-500 leading-normal">
-                      Добавьте сюда названия всех ваших домиков или комнат. У каждого будет вестись свой независимый календарь заездов.
-                    </p>
 
                     <div className="space-y-2">
                       {units.map((u, idx) => (
@@ -310,7 +333,7 @@ export default function AddPropertyPage() {
                             <button
                               type="button"
                               onClick={() => removeUnit(idx)}
-                              className="text-slate-400 hover:text-red-600 p-1 transition-colors"
+                              className="text-slate-400 hover:text-red-600 p-1"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -322,7 +345,7 @@ export default function AddPropertyPage() {
                     <div className="flex gap-2 pt-1">
                       <input
                         type="text"
-                        placeholder="Название (напр. Коттедж №3 или Номер 102)"
+                        placeholder="Название (напр. Домик №3)"
                         value={newUnitName}
                         onChange={(e) => setNewUnitName(e.target.value)}
                         className="flex-1 text-xs bg-white border border-slate-200 rounded-xl px-3 py-2"
@@ -330,7 +353,7 @@ export default function AddPropertyPage() {
                       <button
                         type="button"
                         onClick={addUnit}
-                        className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center space-x-1 transition-colors"
+                        className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center space-x-1"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>Добавить</span>
@@ -354,14 +377,12 @@ export default function AddPropertyPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">
-                      {listingFormat === 'single' ? 'Цена за сутки (₽) *' : 'Цена за 1 домик/номер в сутки (₽) *'}
-                    </label>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Цена за сутки (₽) *</label>
                     <input
                       type="number"
                       name="price_per_night"
                       required
-                      placeholder="5000"
+                      placeholder="6000"
                       value={formData.price_per_night}
                       onChange={handleChange}
                       className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 font-bold text-blue-600"
@@ -371,12 +392,12 @@ export default function AddPropertyPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Расстояние до моря (метров) *</label>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">До моря (метров) *</label>
                     <input
                       type="number"
                       name="distance_to_sea"
                       required
-                      placeholder="150"
+                      placeholder="80"
                       value={formData.distance_to_sea}
                       onChange={handleChange}
                       className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500"
@@ -384,9 +405,7 @@ export default function AddPropertyPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">
-                      {listingFormat === 'single' ? 'Макс. гостей' : 'Вместимость 1 домика/номера'}
-                    </label>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Макс. гостей</label>
                     <input
                       type="number"
                       name="max_guests"
@@ -405,7 +424,7 @@ export default function AddPropertyPage() {
                     type="text"
                     name="address"
                     required
-                    placeholder="г. Избербаш, ул. Приморская, 15"
+                    placeholder="г. Избербаш, Райский пляж, линия 26"
                     value={formData.address}
                     onChange={handleChange}
                     className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500"
@@ -425,11 +444,54 @@ export default function AddPropertyPage() {
                   />
                 </div>
 
-                {/* БОНУСЫ И УДОБСТВА */}
+                {/* ФОТОГРАФИИ С КАДРИРОВАНИЕМ В 16:9 И WEBP */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-2">
-                    Бонусы и удобства
-                  </label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs font-bold text-slate-700 uppercase">
+                      Фотографии объекта (16:9 или 4:3 WebP) *
+                    </label>
+                    <span className="text-[11px] text-teal-600 font-bold">
+                      {photos.length} загружено
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-2">
+                    {photos.map((url, index) => (
+                      <div key={index} className="relative aspect-video rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 group shadow-sm">
+                        <img src={url} alt="Загруженное фото" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePhoto(index)}
+                          className="absolute top-1.5 right-1.5 bg-red-600/90 hover:bg-red-600 text-white p-1 rounded-full shadow-md"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+
+                    <label className="aspect-video border-2 border-dashed border-slate-300 hover:border-teal-500 rounded-2xl flex flex-col items-center justify-center cursor-pointer bg-slate-50 hover:bg-teal-50/40 transition-colors">
+                      <ImagePlus className="w-6 h-6 text-slate-400 mb-1" />
+                      <span className="text-[11px] font-bold text-slate-600">
+                        {uploading ? 'Конвертация...' : '+ Добавить фото'}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleImageSelect}
+                        disabled={uploading}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    При загрузке откроется окно кадрирования, где вы сможете выбрать лучшую область кадра в пропорции 16:9 или 4:3.
+                  </p>
+                </div>
+
+                {/* УДОБСТВА */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Удобства и бонусы</label>
                   <div className="flex flex-wrap gap-2 mb-3">
                     {allAvailableAmenities.map((amenity) => {
                       const isSelected = selectedAmenities.includes(amenity);
@@ -453,50 +515,18 @@ export default function AddPropertyPage() {
                   <div className="flex gap-2">
                     <input
                       type="text"
-                      placeholder="Например: Сапборды / Джакузи"
+                      placeholder="Например: Сапборды / Беседка"
                       value={customAmenity}
                       onChange={(e) => setCustomAmenity(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          addCustomAmenity(e);
-                        }
-                      }}
-                      className="flex-1 text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      className="flex-1 text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"
                     />
                     <button
                       type="button"
                       onClick={addCustomAmenity}
-                      className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center space-x-1 transition-colors cursor-pointer"
+                      className="bg-slate-900 text-white text-xs font-bold px-4 py-2 rounded-xl"
                     >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Добавить</span>
+                      Добавить
                     </button>
-                  </div>
-                </div>
-
-                {/* ФОТОГРАФИИ */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Фотографии *</label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-2">
-                    {photos.map((url, index) => (
-                      <div key={index} className="relative h-24 rounded-2xl overflow-hidden border border-slate-200">
-                        <img src={url} alt="Загруженное фото" className="w-full h-full object-cover" />
-                        <button
-                          type="button"
-                          onClick={() => handleRemovePhoto(index)}
-                          className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-full"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
-
-                    <label className="h-24 border-2 border-dashed border-slate-300 rounded-2xl flex flex-col items-center justify-center cursor-pointer bg-slate-50 hover:bg-blue-50/50">
-                      <ImagePlus className="w-6 h-6 text-slate-400 mb-1" />
-                      <span className="text-xs font-semibold text-slate-600">Загрузить</span>
-                      <input type="file" accept="image/*" multiple onChange={handleImageUpload} disabled={uploading} className="hidden" />
-                    </label>
                   </div>
                 </div>
 
@@ -505,17 +535,17 @@ export default function AddPropertyPage() {
                   <textarea
                     name="description"
                     rows={3}
-                    placeholder="Панорамные окна, закрытая территория, зона барбекю..."
+                    placeholder="Панорамные окна, вид на море, мангальная зона..."
                     value={formData.description}
                     onChange={handleChange}
-                    className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-4 py-3"
                   />
                 </div>
 
                 <button
                   type="submit"
                   disabled={loading || uploading}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm py-4 rounded-2xl transition-colors shadow-lg shadow-blue-500/25 cursor-pointer"
+                  className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold text-sm py-4 rounded-2xl transition-colors shadow-lg shadow-teal-500/25"
                 >
                   {loading ? 'Публикация...' : 'Опубликовать объект'}
                 </button>
@@ -524,6 +554,17 @@ export default function AddPropertyPage() {
           )}
         </div>
       </div>
+
+      {/* МОДАЛКА КАДРИРОВАНИЯ И СЖАТИЯ WEBP */}
+      {currentCroppingImage && (
+        <ImageCropperModal
+          imageSrc={currentCroppingImage.url}
+          originalWidth={currentCroppingImage.width}
+          originalHeight={currentCroppingImage.height}
+          onCropComplete={handleCropComplete}
+          onCancel={() => setCurrentCroppingImage(null)}
+        />
+      )}
     </main>
   );
 }

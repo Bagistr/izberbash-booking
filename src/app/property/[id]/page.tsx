@@ -175,81 +175,56 @@ export default function PropertyDetailPage() {
           </div>
         </div>
 
-        {/* АДАПТИВНАЯ ПРЕМИАЛЬНАЯ ГАЛЕРЕЯ */}
-        <div className="mb-10 overflow-hidden rounded-3xl">
+        {/* МОНОЛИТНАЯ СТАНДАРТИЗИРОВАННАЯ ГАЛЕРЕЯ (16:9) */}
+        <div className="mb-10 rounded-3xl overflow-hidden shadow-sm border border-slate-200/80 bg-slate-100">
           {photos.length === 1 ? (
-            /* 1 ФОТО: Полноразмерный баннер 16:9 */
             <div
               onClick={() => setLightboxIndex(0)}
-              className="relative aspect-[16/9] sm:aspect-[21/9] w-full cursor-pointer overflow-hidden rounded-3xl bg-slate-100 group shadow-sm border border-slate-200"
+              className="relative aspect-video w-full cursor-pointer overflow-hidden group"
             >
               <img
                 src={photos[0]}
                 alt={property.title}
                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
               />
-              <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
-          ) : photos.length === 2 ? (
-            /* 2 ФОТО: Два равных блока */
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 aspect-[4/3] sm:aspect-[16/9] w-full">
-              {photos.slice(0, 2).map((imgUrl, idx) => (
-                <div
-                  key={idx}
-                  onClick={() => setLightboxIndex(idx)}
-                  className="relative h-full w-full cursor-pointer overflow-hidden rounded-3xl bg-slate-100 group shadow-sm border border-slate-200"
-                >
-                  <img
-                    src={imgUrl}
-                    alt={`${property.title} - ${idx + 1}`}
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
-              ))}
             </div>
           ) : (
-            /* 3 И БОЛЕЕ ФОТО: Главное 50% + 2 справа с кнопкой */
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 aspect-[4/3] sm:aspect-[16/9] max-h-[460px] w-full">
-              {/* Главное фото */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-2 aspect-video w-full">
+              {/* Главное фото слева (50% ширины) */}
               <div
                 onClick={() => setLightboxIndex(0)}
-                className="md:col-span-7 relative h-full cursor-pointer overflow-hidden rounded-3xl bg-slate-100 group shadow-sm border border-slate-200"
+                className="md:col-span-6 relative h-full cursor-pointer overflow-hidden group"
               >
                 <img
                   src={photos[0]}
-                  alt={`${property.title} - Главное фото`}
+                  alt={`${property.title} - Главное`}
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                 />
-                <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
 
-              {/* Правая колонка: 2 фото */}
-              <div className="hidden md:grid md:col-span-5 grid-rows-2 gap-3 h-full">
-                {/* Второе фото */}
+              {/* Правая колонка: ровно 2 фото */}
+              <div className="hidden md:grid md:col-span-6 grid-rows-2 gap-2 h-full">
                 <div
-                  onClick={() => setLightboxIndex(1)}
-                  className="relative h-full cursor-pointer overflow-hidden rounded-2xl bg-slate-100 group shadow-sm border border-slate-200"
+                  onClick={() => setLightboxIndex(1 % photos.length)}
+                  className="relative h-full cursor-pointer overflow-hidden group"
                 >
                   <img
-                    src={photos[1]}
-                    alt={`${property.title} - 2`}
+                    src={photos[1] || photos[0]}
+                    alt={`${property.title} 2`}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   />
-                  <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
 
-                {/* Третье фото с бейджем "Все фото" */}
                 <div
-                  onClick={() => setLightboxIndex(2)}
-                  className="relative h-full cursor-pointer overflow-hidden rounded-2xl bg-slate-100 group shadow-sm border border-slate-200"
+                  onClick={() => setLightboxIndex(2 % photos.length)}
+                  className="relative h-full cursor-pointer overflow-hidden group"
                 >
                   <img
-                    src={photos[2]}
-                    alt={`${property.title} - 3`}
+                    src={photos[2] || photos[1] || photos[0]}
+                    alt={`${property.title} 3`}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   />
-                  <div className="absolute inset-0 bg-black/15 group-hover:bg-black/25 transition-colors" />
+                  <div className="absolute inset-0 bg-black/10 group-hover:bg-black/20 transition-colors" />
 
                   <button
                     type="button"
