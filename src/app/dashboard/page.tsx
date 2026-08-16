@@ -252,19 +252,28 @@ export default function DashboardPage() {
 
   const togglePropertyStatus = async (p: Property) => {
     const updatedStatus = !p.is_active;
+
+    // Мгновенное оптимистичное обновление в интерфейсе
+    setProperties((prev) =>
+      prev.map((item) => (item.id === p.id ? { ...item, is_active: updatedStatus } : item))
+    );
+
     try {
       const res = await fetch('/api/landlord/properties', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...p, is_active: updatedStatus }),
+        body: JSON.stringify({ id: p.id, is_active: updatedStatus }),
       });
-      if (res.ok) {
-        setProperties((prev) =>
-          prev.map((item) => (item.id === p.id ? { ...item, is_active: updatedStatus } : item))
-        );
+
+      if (!res.ok) {
+        throw new Error('Ошибка обновления статуса');
       }
     } catch (err) {
       console.error('Ошибка изменения статуса:', err);
+      // Если запрос упал, возвращаем предыдущее состояние
+      setProperties((prev) =>
+        prev.map((item) => (item.id === p.id ? { ...item, is_active: !updatedStatus } : item))
+      );
     }
   };
 
