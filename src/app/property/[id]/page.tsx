@@ -69,10 +69,10 @@ export default function PropertyDetailPage() {
     );
   }
 
-  const photos =
-    property.photos && property.photos.length > 0
-      ? property.photos
-      : ['https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=1000&q=80'];
+  const rawPhotos = property.photos || [];
+  const photos = rawPhotos.length > 0
+    ? rawPhotos
+    : ['https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=1000&q=80'];
 
   const isFav = isFavorite(property.id);
 
@@ -127,7 +127,7 @@ export default function PropertyDetailPage() {
       </header>
 
       <div className="max-w-6xl mx-auto px-4 pt-6">
-        {/* ВЕРХНЯЯ ЧАСТЬ: Заголовок, действия и инфо-строка */}
+        {/* Заголовок, действия и инфо-строка */}
         <div className="space-y-2 mb-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
@@ -135,7 +135,6 @@ export default function PropertyDetailPage() {
             </h1>
 
             <div className="flex items-center space-x-2">
-              {/* Поделиться */}
               <button
                 type="button"
                 onClick={handleShare}
@@ -145,7 +144,6 @@ export default function PropertyDetailPage() {
                 <span>{copied ? 'Ссылка скопирована!' : 'Поделиться'}</span>
               </button>
 
-              {/* В избранное */}
               <button
                 type="button"
                 onClick={handleHeartClick}
@@ -161,7 +159,6 @@ export default function PropertyDetailPage() {
             </div>
           </div>
 
-          {/* Инфо-строка */}
           <div className="flex flex-wrap items-center text-xs sm:text-sm text-slate-600 font-medium gap-y-1">
             <div className="flex items-center text-slate-900 font-bold mr-2">
               <Star className="w-4 h-4 text-amber-500 fill-amber-500 mr-1" />
@@ -178,81 +175,105 @@ export default function PropertyDetailPage() {
           </div>
         </div>
 
-        {/* ГАЛЕРЕЯ ФОТОГРАФИЙ (1 большое фото 50% + 3 горизонтальных справа) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-10 h-[320px] sm:h-[420px] rounded-3xl overflow-hidden shadow-sm">
-          {/* Главное большое фото (50% ширины) */}
-          <div
-            onClick={() => setLightboxIndex(0)}
-            className="relative h-full overflow-hidden cursor-pointer group bg-slate-100"
-          >
-            <img
-              src={photos[0]}
-              alt={`${property.title} - Главное фото`}
-              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-            />
-            <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-          </div>
-
-          {/* Правая колонка из 3 горизонтальных фото */}
-          <div className="grid grid-rows-3 gap-3 h-full">
-            {/* Фото 2 */}
+        {/* АДАПТИВНАЯ ГАЛЕРЕЯ */}
+        <div className="mb-10 rounded-3xl overflow-hidden shadow-sm border border-slate-200/80 bg-slate-100 h-[320px] sm:h-[420px]">
+          {photos.length === 1 ? (
+            /* Вариант 1: Только 1 фото на всю ширину */
             <div
-              onClick={() => setLightboxIndex(1 % photos.length)}
-              className="relative h-full overflow-hidden cursor-pointer group bg-slate-100 rounded-tr-2xl md:rounded-tr-none"
+              onClick={() => setLightboxIndex(0)}
+              className="relative w-full h-full cursor-pointer group overflow-hidden"
             >
               <img
-                src={photos[1] || photos[0]}
-                alt={`${property.title} - Фото 2`}
+                src={photos[0]}
+                alt={property.title}
                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
               />
-              <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
-
-            {/* Фото 3 */}
-            <div
-              onClick={() => setLightboxIndex(2 % photos.length)}
-              className="relative h-full overflow-hidden cursor-pointer group bg-slate-100"
-            >
-              <img
-                src={photos[2] || photos[0]}
-                alt={`${property.title} - Фото 3`}
-                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-              />
-              <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
-
-            {/* Фото 4 с кнопкой "Все фото" */}
-            <div
-              onClick={() => setLightboxIndex(3 < photos.length ? 3 : 0)}
-              className="relative h-full overflow-hidden cursor-pointer group bg-slate-100"
-            >
-              <img
-                src={photos[3] || photos[0]}
-                alt={`${property.title} - Фото 4`}
-                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-              />
-              <div className="absolute inset-0 bg-black/20 group-hover:bg-black/30 transition-colors" />
-
-              {/* Плашка «Все N фото» */}
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setLightboxIndex(0);
-                }}
-                className="absolute bottom-3 right-3 bg-white/95 hover:bg-white text-slate-900 text-xs font-bold px-3.5 py-2 rounded-xl shadow-lg border border-slate-200/80 flex items-center space-x-1.5 transition-all hover:scale-105 active:scale-95"
+          ) : photos.length === 2 ? (
+            /* Вариант 2: Ровно 2 фото (50% / 50%) */
+            <div className="grid grid-cols-2 gap-2 h-full">
+              <div
+                onClick={() => setLightboxIndex(0)}
+                className="relative h-full cursor-pointer group overflow-hidden"
               >
-                <Grid className="w-3.5 h-3.5 text-slate-700" />
-                <span>Все {photos.length} фото</span>
-              </button>
+                <img
+                  src={photos[0]}
+                  alt={`${property.title} 1`}
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                />
+              </div>
+              <div
+                onClick={() => setLightboxIndex(1)}
+                className="relative h-full cursor-pointer group overflow-hidden"
+              >
+                <img
+                  src={photos[1]}
+                  alt={`${property.title} 2`}
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                />
+              </div>
             </div>
-          </div>
+          ) : (
+            /* Вариант 3: 3 и более фото (Главное 50% + Справа 2 горизонтальных с кнопкой) */
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-2 h-full">
+              {/* Главное фото слева (50% ширины) */}
+              <div
+                onClick={() => setLightboxIndex(0)}
+                className="md:col-span-6 relative h-full cursor-pointer group overflow-hidden bg-slate-200"
+              >
+                <img
+                  src={photos[0]}
+                  alt={`${property.title} - Главное`}
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                />
+              </div>
+
+              {/* Правая колонка: 2 фото по 50% высоты каждое */}
+              <div className="hidden md:grid md:col-span-6 grid-rows-2 gap-2 h-full">
+                {/* Фото 2 */}
+                <div
+                  onClick={() => setLightboxIndex(1)}
+                  className="relative h-full cursor-pointer group overflow-hidden bg-slate-200"
+                >
+                  <img
+                    src={photos[1]}
+                    alt={`${property.title} - Фото 2`}
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  />
+                </div>
+
+                {/* Фото 3 с плашкой "Все фото" */}
+                <div
+                  onClick={() => setLightboxIndex(2)}
+                  className="relative h-full cursor-pointer group overflow-hidden bg-slate-200"
+                >
+                  <img
+                    src={photos[2]}
+                    alt={`${property.title} - Фото 3`}
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-black/15 group-hover:bg-black/25 transition-colors" />
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLightboxIndex(0);
+                    }}
+                    className="absolute bottom-3 right-3 bg-white/95 hover:bg-white text-slate-900 text-xs font-bold px-3.5 py-2 rounded-xl shadow-lg border border-slate-200 flex items-center space-x-1.5 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                  >
+                    <Grid className="w-3.5 h-3.5 text-slate-700" />
+                    <span>Все {photos.length} фото</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* НИЖНЯЯ ЧАСТЬ (Оригинальный дизайн: Описание, Удобства и Карточка бронирования) */}
+        {/* НИЖНЯЯ ЧАСТЬ (Описание, Удобства, Карточка бронирования) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-8">
-            {/* Об объекте */}
             <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm">
               <h2 className="text-xl font-bold text-slate-900 mb-4">Об объекте</h2>
               <p className="text-slate-600 leading-relaxed whitespace-pre-line text-sm sm:text-base">
@@ -267,7 +288,6 @@ export default function PropertyDetailPage() {
               </div>
             </div>
 
-            {/* Удобства и бонусы */}
             <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm">
               <h2 className="text-xl font-bold text-slate-900 mb-4">Удобства и бонусы</h2>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -281,7 +301,6 @@ export default function PropertyDetailPage() {
             </div>
           </div>
 
-          {/* Карточка стоимости и бронирования */}
           <div>
             <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-lg sticky top-24 space-y-6">
               <div>
@@ -311,7 +330,7 @@ export default function PropertyDetailPage() {
         </div>
       </div>
 
-      {/* ПОЛНОЭКРАННЫЙ ПРОСМОТР ФОТО (LIGHTBOX) */}
+      {/* Полноэкранный просмотр фото */}
       {lightboxIndex !== null && (
         <div
           onClick={() => setLightboxIndex(null)}
@@ -358,7 +377,6 @@ export default function PropertyDetailPage() {
         </div>
       )}
 
-      {/* Модалка бронирования */}
       {isBookingOpen && (
         <BookingModal
           property={property}
