@@ -1,90 +1,95 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Waves, LogOut, Calendar, MapPin, Phone, Heart, Compass, ArrowLeft } from 'lucide-react';
-import { PropertyCard } from '@/components/PropertyCard';
-import { Property } from '@/types/property';
 import { useAuth } from '@/context/AuthContext';
-import { useFavorites } from '@/context/FavoritesContext';
+import { 
+  Waves, ArrowLeft, Building2, User, Phone, 
+  Calendar, MapPin, Sparkles, ArrowRight, LogOut, ShieldCheck 
+} from 'lucide-react';
 
-interface BookingRecord {
+interface BookingItem {
   id: string;
   property_title: string;
-  address: string;
-  landlord_phone: string;
   check_in: string;
   check_out: string;
-  total_days: number;
   total_price: number;
   status: string;
+  guests_count: number;
 }
 
-export default function GuestProfilePage() {
+export default function ProfilePage() {
   const router = useRouter();
-  const { user, logout, isLoading } = useAuth();
-  const { favorites } = useFavorites();
+  const { user, login, logout } = useAuth();
 
-  const [bookings, setBookings] = useState<BookingRecord[]>([]);
-  const [favoriteProperties, setFavoriteProperties] = useState<Property[]>([]);
-  const [activeTab, setActiveTab] = useState<'bookings' | 'favorites'>('bookings');
-  const [dataLoading, setDataLoading] = useState(true);
+  const [switching, setSwitching] = useState(false);
+  const [bookings, setBookings] = useState<BookingItem[]>([]);
+  const [loadingBookings, setLoadingBookings] = useState(true);
 
-  const loadProfileData = useCallback(async (phone: string) => {
-    try {
-      const [propsRes, bookingsRes] = await Promise.all([
-        fetch('/api/properties'),
-        fetch(`/api/guest/bookings?phone=${encodeURIComponent(phone)}`),
-      ]);
-
-      if (propsRes.ok) {
-        const allProps: Property[] = await propsRes.json();
-        setFavoriteProperties(allProps.filter((p) => favorites.includes(p.id)));
-      }
-
-      if (bookingsRes.ok) {
-        const data = await bookingsRes.json();
-        setBookings(data || []);
-      }
-    } catch (e) {
-      console.error('Ошибка загрузки профиля:', e);
-    } finally {
-      setDataLoading(false);
-    }
-  }, [favorites]);
-
+  // Если не авторизован — отправляем на страницу входа
   useEffect(() => {
-    if (isLoading) return;
-
     if (!user) {
       router.push('/login');
-      return;
+    }
+  }, [user, router]);
+
+  // Загрузка бронирований туриста
+  useEffect(() => {
+    if (!user?.phone) return;
+
+    async function loadBookings() {
+      try {
+        const res = await fetch(`/api/bookings/my?phone=${encodeURIComponent(user?.phone || '')}`);
+        if (res.ok) {
+          const data = await res.json();
+          setBookings(data.bookings || []);
+        }
+      } catch (e) {
+        console.error('Ошибка загрузки бронирований:', e);
+      } finally {
+        setLoadingBookings(false);
+      }
     }
 
-    if (user.role === 'landlord') {
-      router.push('/dashboard');
-      return;
+    loadBookings();
+  }, [user]);
+
+  // Переключение роли на Владельца
+  const handleBecomeLandlord = async () => {
+    if (!user?.phone) return;
+    setSwitching(true);
+
+    try {
+      const res = await fetch('/api/auth/switch-role', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: user.phone, newRole: 'landlord' }),
+      });
+
+      if (res.ok) {
+        // Обновляем роль в локальной сессии
+        login({
+          ...user,
+          role: 'landlord',
+        });
+        // Мгновенно перенаправляем в панель управления жильем
+        router.push('/dashboard');
+      }
+    } catch (err) {
+      console.error('Ошибка смены роли:', err);
+    } finally {
+      setSwitching(false);
     }
-
-    loadProfileData(user.phone);
-  }, [user, isLoading, router, loadProfileData]);
-
-  const handleLogout = () => {
-    logout();
-    router.push('/login');
   };
 
-  if (isLoading || dataLoading) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <p className="text-sm font-semibold text-slate-500 animate-pulse">Загрузка профиля...</p>
-      </div>
-    );
+  if (!user) {
+    return null;
   }
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 pb-16">
+      {/* Шапка */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center space-x-2">
@@ -96,137 +101,148 @@ export default function GuestProfilePage() {
             </span>
           </Link>
 
-          <div className="flex items-center space-x-3">
-            <Link href="/" className="text-xs font-bold text-slate-600 hover:text-blue-600 mr-2 flex items-center">
-              <ArrowLeft className="w-3.5 h-3.5 mr-1" /> В каталог
+          <div className="flex items-center space-x-4">
+            <Link href="/" className="inline-flex items-center text-xs font-bold text-slate-600 hover:text-slate-900">
+              <ArrowLeft className="w-4 h-4 mr-1" /> В каталог
             </Link>
             <button
-              onClick={handleLogout}
-              className="p-2 text-slate-400 hover:text-red-600 rounded-xl hover:bg-slate-100 transition-colors"
-              title="Выйти"
+              type="button"
+              onClick={logout}
+              className="inline-flex items-center text-xs font-bold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-xl transition-all cursor-pointer"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-3.5 h-3.5 mr-1" /> Выйти
             </button>
           </div>
         </div>
       </header>
 
-      <div className="max-w-5xl mx-auto px-4 pt-8 space-y-6">
-        {/* Карточка туриста */}
-        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center space-x-4">
-            <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-xl">
-              {user?.name?.[0] || 'Т'}
+      <div className="max-w-4xl mx-auto px-4 pt-8 space-y-6">
+        {/* КАРТОЧКА: ПЕРЕКЛЮЧЕНИЕ НА ВЛАДЕЛЬЦА */}
+        {user.role !== 'landlord' ? (
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-3xl p-6 sm:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg shadow-blue-600/10">
+            <div className="space-y-1.5">
+              <div className="inline-flex items-center space-x-1.5 bg-white/10 px-3 py-1 rounded-full text-xs font-semibold backdrop-blur-sm">
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <span>Сдавайте жилье на Райском Пляже</span>
+              </div>
+              <h3 className="text-xl font-black tracking-tight">Хотите сдавать свой дом или номер?</h3>
+              <p className="text-xs sm:text-sm text-blue-100 max-w-lg">
+                Переключите аккаунт в режим владельца: ведите шахматку занятости, принимайте прямые заявки и зарабатывайте с минимальной комиссией 7%.
+              </p>
             </div>
-            <div>
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900">{user?.name}</h1>
-              <p className="text-xs text-slate-500">{user?.phone} • Личный кабинет туриста</p>
-            </div>
-          </div>
 
-          <div className="flex space-x-2 bg-slate-100 p-1 rounded-2xl">
             <button
-              onClick={() => setActiveTab('bookings')}
-              className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center space-x-1.5 ${
-                activeTab === 'bookings' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600'
-              }`}
+              type="button"
+              onClick={handleBecomeLandlord}
+              disabled={switching}
+              className="bg-white hover:bg-blue-50 text-blue-700 font-bold text-xs px-5 py-3.5 rounded-2xl flex items-center space-x-2 transition-all shadow-md flex-shrink-0 cursor-pointer"
             >
-              <Calendar className="w-3.5 h-3.5" />
-              <span>Мои поездки ({bookings.length})</span>
+              <Building2 className="w-4 h-4" />
+              <span>{switching ? 'Переключение...' : 'Стать владельцем'}</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
-            <button
-              onClick={() => setActiveTab('favorites')}
-              className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center space-x-1.5 ${
-                activeTab === 'favorites' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-600'
-              }`}
+          </div>
+        ) : (
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 flex items-center justify-between shadow-sm">
+            <div className="flex items-center space-x-3">
+              <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl">
+                <Building2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Вы являетесь владельцем жилья</h3>
+                <p className="text-xs text-slate-500">Управляйте шахматкой, ценами и объектами в личном кабинете</p>
+              </div>
+            </div>
+            <Link
+              href="/dashboard"
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all"
             >
-              <Heart className="w-3.5 h-3.5" />
-              <span>Избранное ({favoriteProperties.length})</span>
-            </button>
+              В кабинет владельца
+            </Link>
+          </div>
+        )}
+
+        {/* ДАННЫЕ ПРОФИЛЯ */}
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6">
+          <h2 className="text-lg font-black text-slate-900">Данные аккаунта</h2>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="flex items-center space-x-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+              <div className="p-2.5 bg-white text-slate-700 rounded-xl shadow-sm">
+                <User className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-[11px] font-bold text-slate-400 uppercase">Имя</p>
+                <p className="text-sm font-bold text-slate-900">{user.name || 'Не указано'}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+              <div className="p-2.5 bg-white text-slate-700 rounded-xl shadow-sm">
+                <Phone className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-[11px] font-bold text-slate-400 uppercase">Телефон</p>
+                <p className="text-sm font-bold text-slate-900">{user.phone}</p>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* ВКЛАДКА: МОИ ПОЕЗДКИ */}
-        {activeTab === 'bookings' && (
-          <div className="space-y-4">
-            <h2 className="text-lg font-bold text-slate-900">История бронирований</h2>
+        {/* ИСТОРИЯ ПОЕЗДОК И БРОНЕЙ */}
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-black text-slate-900">Мои бронирования</h2>
+            <span className="text-xs font-bold text-slate-400">{bookings.length} поездок</span>
+          </div>
 
-            {bookings.length === 0 ? (
-              <div className="bg-white p-12 text-center rounded-3xl border border-slate-200 space-y-3">
-                <Compass className="w-12 h-12 text-slate-300 mx-auto" />
-                <p className="text-slate-700 font-bold text-sm">У вас пока нет активных поездок</p>
-                <p className="text-xs text-slate-400">Выберите подходящий домик в каталоге и забронируйте онлайн.</p>
-                <Link
-                  href="/"
-                  className="inline-block bg-blue-600 text-white font-bold text-xs px-5 py-2.5 rounded-xl hover:bg-blue-700 transition-colors"
-                >
-                  Перейти в каталог
-                </Link>
+          {loadingBookings ? (
+            <p className="text-xs text-slate-400 py-4 animate-pulse">Загрузка бронирований...</p>
+          ) : bookings.length === 0 ? (
+            <div className="text-center py-10 space-y-3">
+              <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl w-fit mx-auto">
+                <Calendar className="w-6 h-6" />
               </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-4">
-                {bookings.map((b) => (
-                  <div key={b.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between gap-4">
-                    <div className="space-y-1.5">
-                      <div className="flex items-center space-x-2">
-                        <h3 className="font-bold text-slate-900 text-base">{b.property_title}</h3>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
-                          Подтверждено
-                        </span>
-                      </div>
-                      <div className="flex items-center text-xs text-slate-500">
-                        <MapPin className="w-3.5 h-3.5 mr-1 text-slate-400" />
-                        <span>{b.address}</span>
-                      </div>
-                      <div className="flex items-center text-xs text-slate-700 pt-1">
-                        <Calendar className="w-3.5 h-3.5 mr-1 text-blue-600" />
-                        <span>Даты: <strong>с {b.check_in.slice(0, 10)} по {b.check_out.slice(0, 10)}</strong> ({b.total_days} н.)</span>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col md:items-end justify-between border-t md:border-t-0 pt-3 md:pt-0 border-slate-100">
-                      <div>
-                        <span className="text-xs text-slate-400 block md:text-right">Стоимость</span>
-                        <span className="text-lg font-black text-blue-600">{Number(b.total_price).toLocaleString('ru-RU')} ₽</span>
-                      </div>
-                      <div className="flex items-center text-xs font-semibold text-slate-600 mt-2">
-                        <Phone className="w-3.5 h-3.5 mr-1 text-blue-600" />
-                        <span>Хозяин: <strong>{b.landlord_phone}</strong></span>
-                      </div>
+              <p className="text-sm font-bold text-slate-800">У вас пока нет активных бронирований</p>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                Выберите подходящий коттедж или номер на берегу моря в нашем каталоге.
+              </p>
+              <Link
+                href="/"
+                className="inline-block bg-blue-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-blue-700 transition-all shadow-md shadow-blue-500/20"
+              >
+                Выбрать жилье
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {bookings.map((b) => (
+                <div
+                  key={b.id}
+                  className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                >
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-bold text-slate-900">{b.property_title}</h4>
+                    <div className="flex items-center text-xs text-slate-500 space-x-3">
+                      <span>Заезд: {new Date(b.check_in).toLocaleDateString('ru-RU')}</span>
+                      <span>•</span>
+                      <span>Выезд: {new Date(b.check_out).toLocaleDateString('ru-RU')}</span>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
-        {/* ВКЛАДКА: ИЗБРАННОЕ */}
-        {activeTab === 'favorites' && (
-          <div className="space-y-4">
-            <h2 className="text-lg font-bold text-slate-900">Сохраненные варианты</h2>
-
-            {favoriteProperties.length === 0 ? (
-              <div className="bg-white p-12 text-center rounded-3xl border border-slate-200 space-y-3">
-                <Heart className="w-12 h-12 text-slate-300 mx-auto" />
-                <p className="text-slate-700 font-bold text-sm">В избранном пока пусто</p>
-                <p className="text-xs text-slate-400">Нажимайте на сердечко в каталоге, чтобы сохранить жилье сюда.</p>
-                <Link
-                  href="/"
-                  className="inline-block bg-blue-600 text-white font-bold text-xs px-5 py-2.5 rounded-xl hover:bg-blue-700 transition-colors"
-                >
-                  Смотреть каталог
-                </Link>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {favoriteProperties.map((property) => (
-                  <PropertyCard key={property.id} property={property} />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+                  <div className="flex items-center justify-between sm:justify-end space-x-4">
+                    <span className="text-sm font-black text-slate-900">
+                      {Number(b.total_price).toLocaleString('ru-RU')} ₽
+                    </span>
+                    <span className="text-[11px] font-bold px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-lg">
+                      Подтверждено
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </main>
   );
