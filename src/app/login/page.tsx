@@ -1,109 +1,119 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Waves, ArrowLeft, Lock, Phone, User as UserIcon, AlertCircle, Compass, Building, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-
-// Функция маскирования номера в формат 8 (***) *** - ** - **
-export function formatPhoneNumber(value: string): string {
-  const digits = value.replace(/\D/g, '');
-  // Берем только 10 цифр после префикса
-  let clean = digits;
-  if (clean.startsWith('7') || clean.startsWith('8')) {
-    clean = clean.slice(1);
-  }
-  clean = clean.slice(0, 10);
-
-  if (clean.length === 0) return '';
-  if (clean.length <= 3) return `8 (${clean}`;
-  if (clean.length <= 6) return `8 (${clean.slice(0, 3)}) ${clean.slice(3)}`;
-  if (clean.length <= 8) return `8 (${clean.slice(0, 3)}) ${clean.slice(3, 6)} - ${clean.slice(6)}`;
-  return `8 (${clean.slice(0, 3)}) ${clean.slice(3, 6)} - ${clean.slice(6, 8)} - ${clean.slice(8, 10)}`;
-}
+import { Waves, Phone, Lock, User, ArrowRight, ShieldCheck, CheckCircle2, PhoneCall } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { user, login } = useAuth();
 
-  const [isRegister, setIsRegister] = useState(false);
   const [role, setRole] = useState<'guest' | 'landlord'>('guest');
+  const [isRegister, setIsRegister] = useState(false);
+
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
-  
-  // Код подтверждения (для регистрации)
-  const [codeSent, setCodeSent] = useState(false);
-  const [verificationCode, setVerificationCode] = useState('');
-  const [timer, setTimer] = useState(0);
-  const [sendingCode, setSendingCode] = useState(false);
+  const [code, setCode] = useState('');
 
+  const [codeSent, setCodeSent] = useState(false);
+  const [timer, setTimer] = useState(0);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
 
-  // Таймер обратного отсчета
+  const tgRef = useRef<HTMLDivElement>(null);
+
+  // Перенаправляем, если уже залогинен
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (timer > 0) {
-      interval = setInterval(() => setTimer((prev) => prev - 1), 1000);
+    if (user) {
+      router.push(user.role === 'landlord' ? '/dashboard' : '/');
     }
-    return () => clearInterval(interval);
+  }, [user, router]);
+
+  // Таймер обратного отсчета для повтора звонка
+  useEffect(() => {
+    if (timer > 0) {
+      const interval = setInterval(() => setTimer((prev) => prev - 1), 1000);
+      return () => clearInterval(interval);
+    }
   }, [timer]);
 
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setPhone(formatPhoneNumber(e.target.value));
-  };
+  // Подключение Telegram Login Widget
+  useEffect(() => {
+    const botName = process.env.NEXT_PUBLIC_TELEGRAM_BOT_NAME;
+    if (!botName || !tgRef.current) return;
 
-  const isPhoneComplete = phone.replace(/\D/g, '').length >= 11;
+    (window as any).onTelegramAuth = async (tgUser: any) => {
+      try {
+        setLoading(true);
+        const res = await fetch('/api/auth/telegram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...tgUser, role }),
+        });
 
-  // Отправка кода подтверждения
-  const handleSendCode = async () => {
-    if (!isPhoneComplete) {
-      setErrorMsg('Пожалуйста, введите полный номер телефона из 10 цифр');
+        const data = await res.json();
+        if (res.ok && data.user) {
+          login(data.user);
+          router.push(data.user.role === 'landlord' ? '/dashboard' : '/');
+        } else {
+          setErrorMsg(data.error || 'Ошибка входа через Telegram');
+        }
+      } catch (e) {
+        setErrorMsg('Не удалось войти через Telegram');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    tgRef.current.innerHTML = '';
+    const script = document.createElement('script');
+    script.src = 'https://telegram.org/js/telegram-widget.js?22';
+    script.setAttribute('data-telegram-login', botName);
+    script.setAttribute('data-size', 'large');
+    script.setAttribute('data-radius', '12');
+    script.setAttribute('data-onauth', 'onTelegramAuth(user)');
+    script.setAttribute('data-request-access', 'write');
+    script.async = true;
+    tgRef.current.appendChild(script);
+  }, [role, login, router]);
+
+  // Запрос входящего звонка через Zvonok.com
+  const handleRequestCall = async () => {
+    if (!phone || phone.replace(/\D/g, '').length < 10) {
+      setErrorMsg('Введите корректный номер телефона');
       return;
     }
+
+    setLoading(true);
     setErrorMsg('');
-    setSendingCode(true);
 
     try {
-      const res = await fetch('/api/auth/send-telegram-code', {
+      const res = await fetch('/api/auth/send-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone }),
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Ошибка отправки кода');
+      if (!res.ok) throw new Error(data.error || 'Ошибка запроса звонка');
 
       setCodeSent(true);
-      setTimer(45);
-      setSuccessMsg('Код подтверждения сформирован и отправлен!');
+      setTimer(60);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Не удалось отправить код');
+      setErrorMsg(err.message || 'Не удалось заказать звонок');
     } finally {
-      setSendingCode(false);
+      setLoading(false);
     }
   };
 
-  // Финальная отправка формы
+  // Финальная отправка формы (Вход или Регистрация)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrorMsg('');
-
-    if (!isPhoneComplete) {
-      setErrorMsg('Введите полный номер телефона в формате 8 (***) *** - ** - **');
-      setLoading(false);
-      return;
-    }
-
-    if (isRegister && (!verificationCode || verificationCode.length !== 4)) {
-      setErrorMsg('Введите 4-значный код подтверждения');
-      setLoading(false);
-      return;
-    }
 
     try {
       const res = await fetch('/api/auth', {
@@ -115,182 +125,166 @@ export default function LoginPage() {
           phone,
           password,
           role,
-          code: verificationCode,
+          code,
         }),
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Ошибка входа');
+      if (!res.ok) throw new Error(data.error || 'Ошибка авторизации');
 
       login(data.user);
-
-      if (data.user.role === 'landlord') {
-        router.push('/dashboard');
-      } else {
-        router.push('/profile');
-      }
+      router.push(data.user.role === 'landlord' ? '/dashboard' : '/');
     } catch (err: any) {
-      setErrorMsg(err.message || 'Ошибка авторизации');
+      setErrorMsg(err.message || 'Ошибка');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <Link href="/" className="inline-flex items-center space-x-2 mb-4">
-          <div className="bg-blue-600 p-2 rounded-xl text-white">
+        <Link href="/" className="inline-flex items-center space-x-2">
+          <div className="bg-blue-600 p-2.5 rounded-2xl text-white shadow-md">
             <Waves className="w-6 h-6" />
           </div>
-          <span className="font-extrabold text-2xl tracking-tight text-slate-900">
+          <span className="font-black text-2xl tracking-tight text-slate-900">
             Райский<span className="text-blue-600">Пляж</span>
           </span>
         </Link>
-
-        <h2 className="text-2xl font-black text-slate-900">
-          {isRegister ? 'Регистрация' : 'Вход в аккаунт'}
+        <h2 className="mt-4 text-xl sm:text-2xl font-black text-slate-900">
+          {isRegister ? 'Создание аккаунта' : 'Вход в личный кабинет'}
         </h2>
-        <p className="text-xs text-slate-500 mt-1">
-          {role === 'guest' ? 'Кабинет туриста: история броней и избранное' : 'Кабинет владельца: шахматка и управление объектами'}
-        </p>
       </div>
 
-      <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md px-4">
-        {/* Крупный выбор роли */}
-        <div className="grid grid-cols-2 gap-2 mb-4 bg-slate-200/80 p-1 rounded-2xl">
-          <button
-            type="button"
-            onClick={() => setRole('guest')}
-            className={`py-2.5 text-xs font-extrabold rounded-xl flex items-center justify-center space-x-1.5 transition-all cursor-pointer ${
-              role === 'guest' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Compass className="w-4 h-4" />
-            <span>Я Турист</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setRole('landlord')}
-            className={`py-2.5 text-xs font-extrabold rounded-xl flex items-center justify-center space-x-1.5 transition-all cursor-pointer ${
-              role === 'landlord' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Building className="w-4 h-4" />
-            <span>Я Владелец</span>
-          </button>
-        </div>
+      <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0">
+        <div className="bg-white py-8 px-6 sm:px-10 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+          
+          {/* Выбор роли */}
+          <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-2xl">
+            <button
+              type="button"
+              onClick={() => setRole('guest')}
+              className={`py-2.5 text-xs font-bold rounded-xl transition-all ${
+                role === 'guest' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+              }`}
+            >
+              Я Турист
+            </button>
+            <button
+              type="button"
+              onClick={() => setRole('landlord')}
+              className={`py-2.5 text-xs font-bold rounded-xl transition-all ${
+                role === 'landlord' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+              }`}
+            >
+              Я Владелец
+            </button>
+          </div>
 
-        <div className="bg-white py-8 px-6 sm:px-10 rounded-3xl shadow-sm border border-slate-200">
           {errorMsg && (
-            <div className="mb-4 p-3.5 bg-red-50 border border-red-200 text-red-600 text-xs font-semibold rounded-2xl flex items-center space-x-2">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span>{errorMsg}</span>
+            <div className="p-3.5 bg-red-50 text-red-600 border border-red-200 rounded-2xl text-xs font-semibold">
+              {errorMsg}
             </div>
           )}
 
-          {successMsg && (
-            <div className="mb-4 p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold rounded-2xl flex items-center space-x-2">
-              <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-emerald-600" />
-              <span>{successMsg}</span>
+          {/* Быстрый вход через Telegram */}
+          <div className="space-y-3">
+            <div className="flex justify-center" ref={tgRef}></div>
+            <div className="relative flex py-1 items-center">
+              <div className="flex-grow border-t border-slate-200"></div>
+              <span className="flex-shrink mx-3 text-[11px] font-bold text-slate-400 uppercase">или по номеру телефона</span>
+              <div className="flex-grow border-t border-slate-200"></div>
             </div>
-          )}
+          </div>
 
-          <form className="space-y-4" onSubmit={handleSubmit}>
-            {/* ИМЯ (только при регистрации) */}
+          {/* Форма авторизации */}
+          <form onSubmit={handleSubmit} className="space-y-4">
             {isRegister && (
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Ваше имя</label>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">Ваше имя</label>
                 <div className="relative">
-                  <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+                  <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
                   <input
                     type="text"
                     required
-                    placeholder="Магомед"
+                    placeholder="Например: Багаудин"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-3 focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold text-slate-900"
+                    className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 font-semibold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   />
                 </div>
               </div>
             )}
 
-            {/* НОМЕР ТЕЛЕФОНА С ЖЕСТКОЙ МАСКОЙ */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Номер телефона</label>
+              <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">Номер телефона</label>
               <div className="relative">
-                <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+                <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
                 <input
                   type="tel"
                   required
-                  placeholder="8 (988) 000 - 00 - 00"
+                  placeholder="+7 (999) 000-00-00"
                   value={phone}
-                  onChange={handlePhoneChange}
-                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-3 focus:ring-2 focus:ring-blue-500 focus:outline-none font-bold text-slate-900 tracking-wider"
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 font-semibold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
               </div>
             </div>
 
-            {/* ПАРОЛЬ */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Пароль</label>
+              <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">Пароль</label>
               <div className="relative">
-                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
                 <input
                   type="password"
                   required
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-3 focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900"
+                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 font-semibold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
               </div>
             </div>
 
-            {/* ПОДТВЕРЖДЕНИЕ КОДОМ (Только при регистрации) */}
+            {/* Блок подтверждения звонком при регистрации */}
             {isRegister && (
-              <div className="pt-2 border-t border-slate-100 space-y-3">
+              <div className="pt-1 space-y-3">
                 {!codeSent ? (
                   <button
                     type="button"
-                    onClick={handleSendCode}
-                    disabled={!isPhoneComplete || sendingCode}
-                    className={`w-full text-xs font-bold py-3 rounded-xl transition-all cursor-pointer ${
-                      isPhoneComplete
-                        ? 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200'
-                        : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                    }`}
+                    onClick={handleRequestCall}
+                    disabled={loading}
+                    className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs py-3 rounded-xl flex items-center justify-center space-x-2 transition-all cursor-pointer"
                   >
-                    {sendingCode ? 'Отправка...' : 'Получить код подтверждения'}
+                    <PhoneCall className="w-4 h-4 text-blue-600" />
+                    <span>Позвонить для подтверждения</span>
                   </button>
                 ) : (
                   <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <label className="block text-xs font-bold text-slate-700 uppercase">
-                        4-значный код
-                      </label>
-                      {timer > 0 ? (
-                        <span className="text-[11px] font-semibold text-slate-400">
-                          Повтор через {timer} сек
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={handleSendCode}
-                          className="text-[11px] font-bold text-blue-600 hover:underline cursor-pointer"
-                        >
-                          Отправить повторно
-                        </button>
-                      )}
+                    <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl text-[11px] text-blue-800 leading-snug">
+                      📞 Вам поступает входящий звонок-сброс. Введите <strong>последние 4 цифры</strong> номера, который вам звонит.
                     </div>
                     <input
                       type="text"
                       maxLength={4}
-                      placeholder="0000"
-                      value={verificationCode}
-                      onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
-                      className="w-full text-center text-lg tracking-[0.5em] font-black bg-slate-50 border border-slate-200 rounded-xl py-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900"
+                      required
+                      placeholder="Последние 4 цифры"
+                      value={code}
+                      onChange={(e) => setCode(e.target.value)}
+                      className="w-full text-center text-lg tracking-widest bg-slate-50 border border-slate-200 rounded-xl py-2.5 font-black text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     />
+                    {timer > 0 ? (
+                      <p className="text-[11px] text-center text-slate-400">Повторный звонок через {timer} сек.</p>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleRequestCall}
+                        className="text-[11px] text-blue-600 hover:underline w-full text-center font-bold"
+                      >
+                        Запросить звонок повторно
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -298,44 +292,30 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={loading || (isRegister && (!codeSent || verificationCode.length !== 4))}
-              className={`w-full font-bold text-xs py-3.5 rounded-xl transition-all shadow-lg mt-2 cursor-pointer ${
-                loading || (isRegister && (!codeSent || verificationCode.length !== 4))
-                  ? 'bg-slate-300 text-slate-500 shadow-none cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/25'
-              }`}
+              disabled={loading || (isRegister && (!code || code.length !== 4))}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-3.5 rounded-xl shadow-lg shadow-blue-500/20 transition-all disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none cursor-pointer"
             >
-              {loading
-                ? 'Проверка...'
-                : isRegister
-                ? 'Завершить регистрацию'
-                : 'Войти в аккаунт'}
+              {loading ? 'Обработка...' : isRegister ? 'Завершить регистрацию' : 'Войти'}
             </button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-slate-100 text-center">
+          {/* Переключение режима Вход / Регистрация */}
+          <div className="text-center pt-2">
             <button
               type="button"
               onClick={() => {
                 setIsRegister(!isRegister);
                 setErrorMsg('');
-                setSuccessMsg('');
                 setCodeSent(false);
-                setVerificationCode('');
               }}
-              className="text-xs text-blue-600 font-bold hover:underline cursor-pointer"
+              className="text-xs text-slate-500 hover:text-slate-800 font-bold"
             >
-              {isRegister ? 'Уже есть аккаунт? Войти' : 'Нет аккаунта? Зарегистрироваться'}
+              {isRegister ? 'Уже есть аккаунт? Войти' : 'Впервые на сайте? Зарегистрироваться'}
             </button>
           </div>
-        </div>
 
-        <div className="text-center mt-4">
-          <Link href="/" className="inline-flex items-center text-xs text-slate-500 hover:text-slate-800">
-            <ArrowLeft className="w-3.5 h-3.5 mr-1" /> На главную страницу
-          </Link>
         </div>
       </div>
-    </main>
+    </div>
   );
 }
