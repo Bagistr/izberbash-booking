@@ -9,42 +9,54 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Номер телефона обязателен' }, { status: 400 });
     }
 
-    const clean10 = phone.replace(/\D/g, '').slice(-10);
-    const standardPhone = `7${clean10}`; // Zvonok ожидает формат 79XXXXXXXXX
+    const digitsOnly = phone.replace(/\D/g, '');
+    if (digitsOnly.length < 10) {
+      return NextResponse.json({ error: 'Введите корректный номер телефона' }, { status: 400 });
+    }
+
+    // Приводим к международному формату с плюсом
+    let formattedPhone = digitsOnly;
+    if (digitsOnly.length === 11 && (digitsOnly.startsWith('7') || digitsOnly.startsWith('8'))) {
+      formattedPhone = `7${digitsOnly.slice(1)}`;
+    }
+    const clean10 = digitsOnly.slice(-10);
 
     const publicKey = process.env.ZVONOK_PUBLIC_KEY;
     const campaignId = process.env.ZVONOK_CAMPAIGN_ID;
 
     if (!publicKey || !campaignId) {
       return NextResponse.json(
-        { error: 'Сервис звонков не настроен в .env.local' },
+        { error: 'Сервис звонков не настроен (проверьте ZVONOK_PUBLIC_KEY и ZVONOK_CAMPAIGN_ID)' },
         { status: 500 }
       );
     }
 
-    // Вызываем Zvonok.com Flash Call API
-    const params = new URLSearchParams({
-      public_key: publicKey,
-      phone: `+${standardPhone}`,
-      campaign_id: campaignId,
-    });
+    // Отправляем POST-запрос с x-www-form-urlencoded
+    const formData = new URLSearchParams();
+    formData.append('public_key', publicKey.trim());
+    formData.append('phone', `+${formattedPhone}`);
+    formData.append('campaign_id', campaignId.trim());
 
-    const zvonokRes = await fetch(`https://zvonok.com/manager/cabapi_external/api/v1/phones/flashcall/?${params.toString()}`, {
-      method: 'GET',
+    const zvonokRes = await fetch('https://zvonok.com/manager/cabapi_external/api/v1/phones/flashcall/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: formData.toString(),
     });
 
     const data = await zvonokRes.json();
 
-    if (data.status !== 'ok' && !data.pincode) {
-      console.error('Ошибка Zvonok API:', data);
-      return NextResponse.json(
-        { error: data.message || 'Не удалось совершить звонок' },
-        { status: 400 }
-      );
+    // Извлекаем пинкод из ответа Zvonok
+    const pincode = data.pincode || data.data?.pincode || data.code;
+
+    if (!pincode) {
+      console.error('Детали ошибки Zvonok API:', data);
+      const errDetail = data.message || data.error || (data.data ? JSON.stringify(data.data) : 'Не удалось совершить звонок');
+      return NextResponse.json({ error: `Ошибка Zvonok: ${errDetail}` }, { status: 400 });
     }
 
-    // PIN-код из ответа Zvonok (последние 4 цифры номера звонящего)
-    const code = String(data.pincode || data.data?.pincode);
+    const code = String(pincode);
 
     // Сохраняем код в базе данных (действителен 3 минуты)
     await sql`
@@ -58,10 +70,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: 'Вам поступает звонок. Введите последние 4 цифры входящего номера.',
+      message: 'Вам поступает звонок. Введите последние 4 цифры номера.',
     });
   } catch (err: any) {
-    console.error('Ошибка send-code:', err);
-    return NextResponse.json({ error: 'Ошибка сервера при отправке кода' }, { status: 500 });
+    console.error('Критическая ошибка send-code:', err);
+    return NextResponse.json({ error: `Ошибка сервера: ${err?.message || 'Сбой соединения'}` }, { status: 500 });
   }
 }

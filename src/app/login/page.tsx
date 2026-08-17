@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { Waves, Phone, Lock, User, ArrowRight, ShieldCheck, CheckCircle2, PhoneCall } from 'lucide-react';
+import { Waves, Phone, Lock, User, PhoneCall, Send } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -24,15 +24,14 @@ export default function LoginPage() {
   const [errorMsg, setErrorMsg] = useState('');
 
   const tgRef = useRef<HTMLDivElement>(null);
+  const botName = process.env.NEXT_PUBLIC_TELEGRAM_BOT_NAME || '';
 
-  // Перенаправляем, если уже залогинен
   useEffect(() => {
     if (user) {
       router.push(user.role === 'landlord' ? '/dashboard' : '/');
     }
   }, [user, router]);
 
-  // Таймер обратного отсчета для повтора звонка
   useEffect(() => {
     if (timer > 0) {
       const interval = setInterval(() => setTimer((prev) => prev - 1), 1000);
@@ -40,9 +39,8 @@ export default function LoginPage() {
     }
   }, [timer]);
 
-  // Подключение Telegram Login Widget
+  // Инициализация виджета Telegram
   useEffect(() => {
-    const botName = process.env.NEXT_PUBLIC_TELEGRAM_BOT_NAME;
     if (!botName || !tgRef.current) return;
 
     (window as any).onTelegramAuth = async (tgUser: any) => {
@@ -78,9 +76,8 @@ export default function LoginPage() {
     script.setAttribute('data-request-access', 'write');
     script.async = true;
     tgRef.current.appendChild(script);
-  }, [role, login, router]);
+  }, [botName, role, login, router]);
 
-  // Запрос входящего звонка через Zvonok.com
   const handleRequestCall = async () => {
     if (!phone || phone.replace(/\D/g, '').length < 10) {
       setErrorMsg('Введите корректный номер телефона');
@@ -109,7 +106,6 @@ export default function LoginPage() {
     }
   };
 
-  // Финальная отправка формы (Вход или Регистрация)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -135,7 +131,7 @@ export default function LoginPage() {
       login(data.user);
       router.push(data.user.role === 'landlord' ? '/dashboard' : '/');
     } catch (err: any) {
-      setErrorMsg(err.message || 'Ошибка');
+      setErrorMsg(err.message || 'Ошибка входа');
     } finally {
       setLoading(false);
     }
@@ -160,12 +156,11 @@ export default function LoginPage() {
       <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0">
         <div className="bg-white py-8 px-6 sm:px-10 rounded-3xl border border-slate-200 shadow-sm space-y-6">
           
-          {/* Выбор роли */}
           <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-2xl">
             <button
               type="button"
               onClick={() => setRole('guest')}
-              className={`py-2.5 text-xs font-bold rounded-xl transition-all ${
+              className={`py-2.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
                 role === 'guest' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
               }`}
             >
@@ -174,7 +169,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => setRole('landlord')}
-              className={`py-2.5 text-xs font-bold rounded-xl transition-all ${
+              className={`py-2.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
                 role === 'landlord' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
               }`}
             >
@@ -188,9 +183,13 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Быстрый вход через Telegram */}
+          {/* Виджет Telegram */}
           <div className="space-y-3">
-            <div className="flex justify-center" ref={tgRef}></div>
+            <div className="flex justify-center min-h-[40px] items-center" ref={tgRef}>
+              {!botName && (
+                <span className="text-xs text-slate-400">Укажите NEXT_PUBLIC_TELEGRAM_BOT_NAME в Vercel</span>
+              )}
+            </div>
             <div className="relative flex py-1 items-center">
               <div className="flex-grow border-t border-slate-200"></div>
               <span className="flex-shrink mx-3 text-[11px] font-bold text-slate-400 uppercase">или по номеру телефона</span>
@@ -198,7 +197,6 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Форма авторизации */}
           <form onSubmit={handleSubmit} className="space-y-4">
             {isRegister && (
               <div>
@@ -247,7 +245,6 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Блок подтверждения звонком при регистрации */}
             {isRegister && (
               <div className="pt-1 space-y-3">
                 {!codeSent ? (
@@ -263,13 +260,13 @@ export default function LoginPage() {
                 ) : (
                   <div className="space-y-2">
                     <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl text-[11px] text-blue-800 leading-snug">
-                      📞 Вам поступает входящий звонок-сброс. Введите <strong>последние 4 цифры</strong> номера, который вам звонит.
+                      📞 Вам поступает входящий звонок. Введите <strong>последние 4 цифры</strong> входящего номера.
                     </div>
                     <input
                       type="text"
                       maxLength={4}
                       required
-                      placeholder="Последние 4 цифры"
+                      placeholder="4 цифры"
                       value={code}
                       onChange={(e) => setCode(e.target.value)}
                       className="w-full text-center text-lg tracking-widest bg-slate-50 border border-slate-200 rounded-xl py-2.5 font-black text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
@@ -299,7 +296,6 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Переключение режима Вход / Регистрация */}
           <div className="text-center pt-2">
             <button
               type="button"
@@ -308,7 +304,7 @@ export default function LoginPage() {
                 setErrorMsg('');
                 setCodeSent(false);
               }}
-              className="text-xs text-slate-500 hover:text-slate-800 font-bold"
+              className="text-xs text-slate-500 hover:text-slate-800 font-bold cursor-pointer"
             >
               {isRegister ? 'Уже есть аккаунт? Войти' : 'Впервые на сайте? Зарегистрироваться'}
             </button>
