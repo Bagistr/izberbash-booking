@@ -7,7 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import {
   Waves, DollarSign, TrendingUp, Users, Calendar as CalendarIcon,
   Plus, LogOut, Edit3, Eye, EyeOff, ChevronLeft, ChevronRight,
-  X, Lock, Unlock, Phone, User, PlusCircle
+  X, Lock, Unlock, Phone, User, PlusCircle, CreditCard, ArrowUpRight
 } from 'lucide-react';
 import { Property } from '@/types/property';
 
@@ -53,6 +53,15 @@ export default function DashboardPage() {
   });
   const [dataLoading, setDataLoading] = useState(true);
 
+  // Состояния для баланса и вывода средств
+  const [balance, setBalance] = useState<number>(0);
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [cardNumber, setCardNumber] = useState('');
+  const [bankName, setBankName] = useState('');
+  const [withdrawLoading, setWithdrawLoading] = useState(false);
+  const [withdrawMsg, setWithdrawMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   // Календарь
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedPropertyFilter, setSelectedPropertyFilter] = useState<string>('all');
@@ -92,6 +101,15 @@ export default function DashboardPage() {
           }));
         }
       }
+
+      // Загрузка баланса
+      const balanceRes = await fetch(`/api/landlord/balance?phone=${encodeURIComponent(phone)}`);
+      if (balanceRes.ok) {
+        const balanceData = await balanceRes.json();
+        setBalance(balanceData.balance || 0);
+        if (balanceData.payout_card) setCardNumber(balanceData.payout_card);
+        if (balanceData.payout_bank) setBankName(balanceData.payout_bank);
+      }
     } catch (err) {
       console.error('Ошибка загрузки дашборда:', err);
     } finally {
@@ -118,6 +136,40 @@ export default function DashboardPage() {
   const handleLogout = () => {
     logout();
     router.push('/login');
+  };
+
+  const handleWithdraw = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setWithdrawLoading(true);
+    setWithdrawMsg(null);
+
+    try {
+      const res = await fetch('/api/landlord/payout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: user?.phone,
+          amount: Number(withdrawAmount),
+          cardNumber,
+          bankName,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Ошибка вывода');
+
+      setWithdrawMsg({ type: 'success', text: 'Заявка на вывод отправлена! Средства поступят на карту.' });
+      setBalance(data.newBalance);
+      setWithdrawAmount('');
+      setTimeout(() => {
+        setShowWithdrawModal(false);
+        setWithdrawMsg(null);
+      }, 2500);
+    } catch (err: any) {
+      setWithdrawMsg({ type: 'error', text: err.message || 'Ошибка' });
+    } finally {
+      setWithdrawLoading(false);
+    }
   };
 
   const prevMonth = () => {
@@ -149,9 +201,7 @@ export default function DashboardPage() {
     });
   };
 
-  // Клик по свободной ячейке шахматки
   const handleFreeDayClick = (dateStr: string) => {
-    // Следующий день по умолчанию для даты выезда
     const nextDate = new Date(dateStr);
     nextDate.setDate(nextDate.getDate() + 1);
     const nextDateStr = nextDate.toISOString().slice(0, 10);
@@ -253,7 +303,6 @@ export default function DashboardPage() {
   const togglePropertyStatus = async (p: Property) => {
     const updatedStatus = !p.is_active;
 
-    // Мгновенное оптимистичное обновление в интерфейсе
     setProperties((prev) =>
       prev.map((item) => (item.id === p.id ? { ...item, is_active: updatedStatus } : item))
     );
@@ -270,7 +319,6 @@ export default function DashboardPage() {
       }
     } catch (err) {
       console.error('Ошибка изменения статуса:', err);
-      // Если запрос упал, возвращаем предыдущее состояние
       setProperties((prev) =>
         prev.map((item) => (item.id === p.id ? { ...item, is_active: !updatedStatus } : item))
       );
@@ -342,17 +390,54 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 1. БЛОК АНАЛИТИКИ */}
+        {/* 1. КАРТОЧКА БАЛАНСА ВЛАДЕЛЬЦА */}
+        <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200/80 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center space-x-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                Баланс предоплат (10%)
+              </span>
+              <span className="text-[11px] text-emerald-600 font-bold bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                0% комиссии платформы
+              </span>
+            </div>
+            <div className="flex items-baseline space-x-2">
+              <h3 className="text-3xl sm:text-4xl font-black text-slate-900">
+                {balance.toLocaleString('ru-RU')} ₽
+              </h3>
+            </div>
+            <p className="text-xs text-slate-500 max-w-xl">
+              Предоплата 10% от гостей зачисляется сюда в момент бронирования. Вы можете вывести её на карту в любой момент.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowWithdrawModal(true)}
+            disabled={balance <= 0}
+            className={`px-5 py-3.5 rounded-2xl font-bold text-xs transition-all flex items-center space-x-2 flex-shrink-0 cursor-pointer ${
+              balance > 0
+                ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/25'
+                : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+            }`}
+          >
+            <CreditCard className="w-4 h-4" />
+            <span>Вывести на карту</span>
+            <ArrowUpRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* 2. БЛОК АНАЛИТИКИ */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-400 uppercase">Чистый заработок</span>
+              <span className="text-xs font-bold text-slate-400 uppercase">Общий оборот</span>
               <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
                 <DollarSign className="w-5 h-5" />
               </div>
             </div>
-            <p className="text-2xl font-black text-slate-900">{stats.netRevenue.toLocaleString('ru-RU')} ₽</p>
-            <p className="text-[11px] text-emerald-600 font-bold">После вычета комиссии 7%</p>
+            <p className="text-2xl font-black text-slate-900">{stats.totalRevenue.toLocaleString('ru-RU')} ₽</p>
+            <p className="text-[11px] text-emerald-600 font-bold">100% сумма бронирований</p>
           </div>
 
           <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-2">
@@ -362,8 +447,8 @@ export default function DashboardPage() {
                 <TrendingUp className="w-5 h-5" />
               </div>
             </div>
-            <p className="text-2xl font-black text-blue-600">{stats.platformCommission.toLocaleString('ru-RU')} ₽</p>
-            <p className="text-[11px] text-slate-400">Плата за клиентов</p>
+            <p className="text-2xl font-black text-emerald-600">0 ₽</p>
+            <p className="text-[11px] text-slate-400">Бесплатно для владельцев</p>
           </div>
 
           <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-2">
@@ -389,7 +474,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 2. ИНТЕРАКТИВНАЯ ШАХМАТКА ЗАСЕЛЕННОСТИ */}
+        {/* 3. ИНТЕРАКТИВНАЯ ШАХМАТКА ЗАСЕЛЕННОСТИ */}
         <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
             <div className="flex items-center space-x-3">
@@ -498,7 +583,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 3. МОИ ОБЪЯВЛЕНИЯ */}
+        {/* 4. МОИ ОБЪЯВЛЕНИЯ */}
         <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-6">
           <div className="flex items-center justify-between border-b border-slate-100 pb-4">
             <h2 className="text-lg font-bold text-slate-900">Мои объекты ({properties.length})</h2>
@@ -552,11 +637,94 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* МОДАЛКА ВЫВОДА СРЕДСТВ */}
+      {showWithdrawModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-100 space-y-5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-black text-slate-900">Вывод средств</h3>
+              <button
+                type="button"
+                onClick={() => setShowWithdrawModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-sm cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {withdrawMsg && (
+              <div
+                className={`p-3.5 rounded-2xl text-xs font-semibold ${
+                  withdrawMsg.type === 'success'
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : 'bg-red-50 text-red-600 border border-red-200'
+                }`}
+              >
+                {withdrawMsg.text}
+              </div>
+            )}
+
+            <form onSubmit={handleWithdraw} className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Сумма к выводу (доступно: {balance.toLocaleString('ru-RU')} ₽)
+                </label>
+                <input
+                  type="number"
+                  required
+                  max={balance}
+                  min={100}
+                  placeholder="Например: 5000"
+                  value={withdrawAmount}
+                  onChange={(e) => setWithdrawAmount(e.target.value)}
+                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-3 font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Номер карты или телефон для СБП
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="2200 0000 0000 0000 или +7 9..."
+                  value={cardNumber}
+                  onChange={(e) => setCardNumber(e.target.value)}
+                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-3 font-semibold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Банк получателя
+                </label>
+                <input
+                  type="text"
+                  placeholder="Сбер, Т-Банк, ВТБ..."
+                  value={bankName}
+                  onChange={(e) => setBankName(e.target.value)}
+                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-3 font-semibold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={withdrawLoading || !withdrawAmount || Number(withdrawAmount) > balance}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-3.5 rounded-xl shadow-lg shadow-blue-500/20 transition-all disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none cursor-pointer"
+              >
+                {withdrawLoading ? 'Отправка заявки...' : 'Подтвердить вывод'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* МОДАЛКА БЫСТРОГО ЗАКРЫТИЯ ДАТ */}
       {isBlockModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 relative shadow-2xl space-y-4">
-            <button onClick={() => setIsBlockModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1">
+            <button onClick={() => setIsBlockModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
               <X className="w-5 h-5" />
             </button>
 
@@ -642,7 +810,7 @@ export default function DashboardPage() {
       {selectedDayBookings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 relative shadow-2xl space-y-4">
-            <button onClick={() => setSelectedDayBookings(null)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1">
+            <button onClick={() => setSelectedDayBookings(null)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
               <X className="w-5 h-5" />
             </button>
 
@@ -677,6 +845,7 @@ export default function DashboardPage() {
                     {isBlocked && (
                       <div className="pt-2 border-t border-slate-200">
                         <button
+                          type="button"
                           onClick={() => handleUnlockBooking(b.id)}
                           className="w-full bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs py-2 rounded-xl flex items-center justify-center space-x-1 transition-colors cursor-pointer"
                         >
@@ -697,7 +866,7 @@ export default function DashboardPage() {
       {editingProperty && editFormData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 relative shadow-2xl max-h-[90vh] overflow-y-auto">
-            <button onClick={() => setEditingProperty(null)} className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 p-1">
+            <button onClick={() => setEditingProperty(null)} className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
               <X className="w-6 h-6" />
             </button>
 
@@ -711,7 +880,7 @@ export default function DashboardPage() {
                   required
                   value={editFormData.title}
                   onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
-                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5"
+                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 font-semibold"
                 />
               </div>
 
@@ -807,10 +976,10 @@ export default function DashboardPage() {
               </div>
 
               <div className="pt-4 flex items-center justify-end space-x-3">
-                <button type="button" onClick={() => setEditingProperty(null)} className="text-xs font-bold text-slate-600 px-4 py-2.5 rounded-xl hover:bg-slate-100">
+                <button type="button" onClick={() => setEditingProperty(null)} className="text-xs font-bold text-slate-600 px-4 py-2.5 rounded-xl hover:bg-slate-100 cursor-pointer">
                   Отмена
                 </button>
-                <button type="submit" disabled={savingEdit} className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-6 py-2.5 rounded-xl shadow-md shadow-teal-600/20">
+                <button type="submit" disabled={savingEdit} className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-6 py-2.5 rounded-xl shadow-md shadow-teal-600/20 cursor-pointer">
                   {savingEdit ? 'Сохранение...' : 'Сохранить изменения'}
                 </button>
               </div>
