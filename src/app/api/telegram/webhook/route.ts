@@ -4,129 +4,109 @@ import { sql } from '@/lib/db';
 export async function POST(request: Request) {
   try {
     const update = await request.json();
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
 
-    if (!update.message) {
+    // Проверяем наличие сообщения
+    if (!update || !update.message) {
       return NextResponse.json({ ok: true });
     }
 
     const message = update.message;
-    const chatId = message.chat.id;
     const text = message.text || '';
+    const chatId = message.chat.id;
+    const telegramId = String(message.from.id);
+    const firstName = message.from.first_name || '';
+    const lastName = message.from.last_name || '';
+    const username = message.from.username || '';
+    const fullName = [firstName, lastName].filter(Boolean).join(' ') || username || 'Гость';
 
-    // 1. Обработка команды /start с токеном: /start token_12345
-    if (text.startsWith('/start ')) {
-      const sessionToken = text.replace('/start ', '').trim();
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
 
-      // Проверяем актуальность сессии
-      const session = await sql`
-        SELECT * FROM telegram_verifications
-        WHERE session_token = ${sessionToken}
-          AND expires_at > NOW()
-          AND verified = FALSE
-        LIMIT 1
-      `;
-
-      if (session.length > 0) {
-        // Отправляем кнопку запроса контакта
+    // Вспомогательная функция отправки сообщения в Telegram
+    const sendMessage = async (chat_id: number | string, replyText: string) => {
+      if (!botToken) return;
+      try {
         await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            chat_id: chatId,
-            text: `👋 Здравствуйте, ${message.from.first_name}!\n\nДля подтверждения входа на платформу **Райский Пляж** нажмите кнопку ниже, чтобы подтвердить свой номер телефона.`,
-            reply_markup: {
-              keyboard: [
-                [
-                  {
-                    text: '📱 Подтвердить номер телефона',
-                    request_contact: true,
-                  },
-                ],
-              ],
-              resize_keyboard: true,
-              one_time_keyboard: true,
-            },
+            chat_id,
+            text: replyText,
+            parse_mode: 'HTML',
           }),
         });
+      } catch (err) {
+        console.error('Ошибка отправки сообщения TG:', err);
+      }
+    };
 
-        // Запоминаем chat_id в сессии
-        await sql`
-          UPDATE telegram_verifications
-          SET telegram_user_id = ${chatId}
-          WHERE session_token = ${sessionToken}
-        `;
+    // 1. ОБРАБОТКА АВТОРИЗАЦИИ ПО ССЫЛКЕ С САЙТА (/start auth_...)
+    if (text.startsWith('/start auth_')) {
+      const token = text.replace('/start auth_', '').trim();
+
+      // Проверяем, существует ли такая сессия ожидания
+      const sessionRows = await sql`
+        SELECT token, status FROM telegram_auth_sessions
+        WHERE token = ${token} AND status = 'pending'
+        LIMIT 1
+      `;
+
+      if (sessionRows.length === 0) {
+        await sendMessage(
+          chatId,
+          '⚠️ <b>Время сессии авторизации истекло.</b>\nПожалуйста, вернитесь на сайт и нажмите кнопку «Войти через Telegram» заново.'
+        );
+        return NextResponse.json({ ok: true });
+      }
+
+      // Ищем или регистрируем пользователя в таблице users
+      const existingUser = await sql`
+        SELECT id, name, phone, role FROM users
+        WHERE telegram_id = ${telegramId} OR phone = ${`tg_${telegramId}`}
+        LIMIT 1
+      `;
+
+      let currentUser;
+      if (existingUser.length > 0) {
+        currentUser = existingUser[0];
       } else {
-        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: '⚠️ Ссылка устарела. Пожалуйста, запросите вход на сайте повторно.',
-          }),
-        });
+        const newUser = await sql`
+          INSERT INTO users (name, phone, role, telegram_id)
+          VALUES (${fullName}, ${`tg_${telegramId}`}, 'guest', ${telegramId})
+          RETURNING id, name, phone, role
+        `;
+        currentUser = newUser[0];
       }
-    }
 
-    // 2. Обработка отправки контакта (пользователь нажал кнопку)
-    if (message.contact) {
-      let rawPhone = message.contact.phone_number.replace(/\D/g, '');
-      if (rawPhone.length === 10) rawPhone = '7' + rawPhone;
-      if (rawPhone.startsWith('8') && rawPhone.length === 11) rawPhone = '7' + rawPhone.slice(1);
-
-      const tgUserId = message.from.id;
-      const firstName = message.from.first_name || '';
-
-      // Находим активную сессию
-      const activeSession = await sql`
-        SELECT * FROM telegram_verifications
-        WHERE telegram_user_id = ${tgUserId}
-          AND expires_at > NOW()
-          AND verified = FALSE
-        ORDER BY created_at DESC
-        LIMIT 1
+      // Обновляем статус сессии на authorized и сохраняем данные пользователя
+      await sql`
+        UPDATE telegram_auth_sessions
+        SET status = 'authorized',
+            user_id = ${currentUser.id}::uuid,
+            user_data = ${JSON.stringify(currentUser)}::jsonb
+        WHERE token = ${token}
       `;
 
-      if (activeSession.length > 0) {
-        const session = activeSession[0];
+      // Отправляем пользователю приятное подтверждение в чат
+      await sendMessage(
+        chatId,
+        `🎉 <b>Добро пожаловать, ${fullName}!</b>\n\nВход на сайт <b>«Райский Пляж»</b> успешно выполнен.\nМожете возвращаться в браузер — ваша страница уже открыта!`
+      );
 
-        // Помечаем сессию подтвержденной
-        await sql`
-          UPDATE telegram_verifications
-          SET phone = ${rawPhone},
-              first_name = ${firstName},
-              verified = TRUE
-          WHERE id = ${session.id}::uuid
-        `;
+      return NextResponse.json({ ok: true });
+    }
 
-        // Создаем или находим пользователя в таблице users
-        const existingUsers = await sql`
-          SELECT * FROM users WHERE regexp_replace(phone, '\D', '', 'g') LIKE ${`%${rawPhone.slice(-10)}`} LIMIT 1
-        `;
-
-        if (existingUsers.length === 0) {
-          await sql`
-            INSERT INTO users (name, phone, role)
-            VALUES (${firstName}, ${rawPhone}, ${session.role || 'guest'})
-          `;
-        }
-
-        // Отправляем приятное сообщение об успехе
-        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: '✅ **Номер успешно подтвержден!**\n\nМожете вернуться в браузер — вход выполнен автоматически.',
-            reply_markup: { remove_keyboard: true },
-          }),
-        });
-      }
+    // 2. ОБЫЧНАЯ КОМАНДА /start (без параметров)
+    if (text === '/start') {
+      await sendMessage(
+        chatId,
+        `👋 Здравствуйте, <b>${fullName}</b>!\n\nЭто официальный бот сервиса бронирования <b>«Райский Пляж»</b>.\nЗдесь вы будете получать уведомления о бронированиях и можете авторизоваться на сайте в 1 клик.`
+      );
+      return NextResponse.json({ ok: true });
     }
 
     return NextResponse.json({ ok: true });
-  } catch (err) {
-    console.error('Ошибка Webhook Telegram:', err);
-    return NextResponse.json({ ok: true });
+  } catch (error: any) {
+    console.error('Ошибка в telegram webhook:', error);
+    return NextResponse.json({ ok: true }); // Всегда возвращаем 200/ok для Telegram, чтобы он не спамил повторами
   }
 }

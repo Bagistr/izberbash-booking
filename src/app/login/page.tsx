@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { Waves, Phone, Lock, User, PhoneCall, Send } from 'lucide-react';
+import { Waves, Phone, Lock, User, PhoneCall, Loader2, ArrowRight } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,25 +13,41 @@ export default function LoginPage() {
   const [role, setRole] = useState<'guest' | 'landlord'>('guest');
   const [isRegister, setIsRegister] = useState(false);
 
+  // Поля для классического входа по телефону
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
 
+  // Состояния звонка-сброса
   const [codeSent, setCodeSent] = useState(false);
   const [timer, setTimer] = useState(0);
+
+  // Состояния Telegram авторизации
+  const [tgLoading, setTgLoading] = useState(false);
+  const [tgWaiting, setTgWaiting] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const tgRef = useRef<HTMLDivElement>(null);
-  const botName = process.env.NEXT_PUBLIC_TELEGRAM_BOT_NAME || '';
-
+  // Если пользователь уже авторизован — перенаправляем
   useEffect(() => {
     if (user) {
       router.push(user.role === 'landlord' ? '/dashboard' : '/');
     }
   }, [user, router]);
 
+  // Очистка таймера опроса при уходе со страницы
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Таймер повторного звонка
   useEffect(() => {
     if (timer > 0) {
       const interval = setInterval(() => setTimer((prev) => prev - 1), 1000);
@@ -39,45 +55,62 @@ export default function LoginPage() {
     }
   }, [timer]);
 
-  // Инициализация виджета Telegram
-  useEffect(() => {
-    if (!botName || !tgRef.current) return;
+  // 1. БЕСШОВНЫЙ ВХОД ЧЕРЕЗ ПРИЛОЖЕНИЕ TELEGRAM (1 КЛИК)
+  const handleTelegramDeepLinkLogin = async () => {
+    setErrorMsg('');
+    setTgLoading(true);
 
-    (window as any).onTelegramAuth = async (tgUser: any) => {
-      try {
-        setLoading(true);
-        const res = await fetch('/api/auth/telegram', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...tgUser, role }),
-        });
+    try {
+      // 1. Запрашиваем сессию авторизации
+      const res = await fetch('/api/auth/tg-session', { method: 'POST' });
+      const data = await res.json();
 
-        const data = await res.json();
-        if (res.ok && data.user) {
-          login(data.user);
-          router.push(data.user.role === 'landlord' ? '/dashboard' : '/');
-        } else {
-          setErrorMsg(data.error || 'Ошибка входа через Telegram');
-        }
-      } catch (e) {
-        setErrorMsg('Не удалось войти через Telegram');
-      } finally {
-        setLoading(false);
+      if (!res.ok || !data.token || !data.tgUrl) {
+        throw new Error(data.error || 'Не удалось создать сессию Telegram');
       }
-    };
 
-    tgRef.current.innerHTML = '';
-    const script = document.createElement('script');
-    script.src = 'https://telegram.org/js/telegram-widget.js?22';
-    script.setAttribute('data-telegram-login', botName);
-    script.setAttribute('data-size', 'large');
-    script.setAttribute('data-radius', '12');
-    script.setAttribute('data-onauth', 'onTelegramAuth(user)');
-    script.setAttribute('data-request-access', 'write');
-    script.async = true;
-    tgRef.current.appendChild(script);
-  }, [botName, role, login, router]);
+      setTgWaiting(true);
 
+      // 2. Открываем приложение Telegram
+      window.open(data.tgUrl, '_blank');
+
+      // 3. Запускаем опрос статуса сессии каждые 1.5 секунды
+      pollingIntervalRef.current = setInterval(async () => {
+        try {
+          const checkRes = await fetch(`/api/auth/tg-session?token=${data.token}`);
+          const checkData = await checkRes.json();
+
+          if (checkData.status === 'authorized' && checkData.user) {
+            if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+            setTgWaiting(false);
+            setTgLoading(false);
+
+            // Сохраняем пользователя в контекст
+            login(checkData.user);
+            router.push(checkData.user.role === 'landlord' ? '/dashboard' : '/');
+          }
+        } catch (pollErr) {
+          console.error('Ошибка проверки Telegram-сессии:', pollErr);
+        }
+      }, 1500);
+
+      // Автоматическая остановка опроса через 2 минуты
+      setTimeout(() => {
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          setTgWaiting(false);
+          setTgLoading(false);
+        }
+      }, 120000);
+
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Ошибка открытия Telegram');
+      setTgLoading(false);
+      setTgWaiting(false);
+    }
+  };
+
+  // 2. ЗАПРОС ЗВОНКА-СБРОСА (Zvonok.com)
   const handleRequestCall = async () => {
     if (!phone || phone.replace(/\D/g, '').length < 10) {
       setErrorMsg('Введите корректный номер телефона');
@@ -103,12 +136,13 @@ export default function LoginPage() {
       setCodeSent(true);
       setTimer(60);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Не удалось заказать звонок');
+      setErrorMsg(err.message || 'Не удалось совершить звонок');
     } finally {
       setLoading(false);
     }
   };
 
+  // 3. КЛАССИЧЕСКАЯ ОТПРАВКА ФОРМЫ (Телефон + Пароль)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -159,6 +193,7 @@ export default function LoginPage() {
       <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0">
         <div className="bg-white py-8 px-6 sm:px-10 rounded-3xl border border-slate-200 shadow-sm space-y-6">
           
+          {/* Переключатель роли */}
           <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-2xl">
             <button
               type="button"
@@ -186,20 +221,41 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Виджет Telegram */}
+          {/* ГЛАВНАЯ КНОПКА: ВХОД ЧЕРЕЗ ПРИЛОЖЕНИЕ TELEGRAM */}
           <div className="space-y-3">
-            <div className="flex justify-center min-h-[40px] items-center" ref={tgRef}>
-              {!botName && (
-                <span className="text-xs text-slate-400">Укажите NEXT_PUBLIC_TELEGRAM_BOT_NAME в Vercel</span>
+            <button
+              type="button"
+              onClick={handleTelegramDeepLinkLogin}
+              disabled={tgLoading}
+              className="w-full bg-[#229ED9] hover:bg-[#1E88E5] text-white font-bold text-sm py-3.5 px-4 rounded-2xl flex items-center justify-center space-x-2.5 shadow-lg shadow-blue-400/25 transition-all cursor-pointer disabled:opacity-75"
+            >
+              {tgLoading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
+                </svg>
               )}
-            </div>
-            <div className="relative flex py-1 items-center">
+              <span>Войти через Telegram</span>
+            </button>
+
+            {tgWaiting && (
+              <div className="p-3.5 bg-blue-50 border border-blue-100 rounded-2xl flex items-center space-x-3 text-left animate-pulse">
+                <Loader2 className="w-5 h-5 text-blue-600 animate-spin flex-shrink-0" />
+                <p className="text-xs text-blue-800 font-medium leading-relaxed">
+                  Нажмите <b>«Запустить» (Start)</b> в открывшемся Telegram-боте для входа на сайт...
+                </p>
+              </div>
+            )}
+
+            <div className="relative flex py-2 items-center">
               <div className="flex-grow border-t border-slate-200"></div>
               <span className="flex-shrink mx-3 text-[11px] font-bold text-slate-400 uppercase">или по номеру телефона</span>
               <div className="flex-grow border-t border-slate-200"></div>
             </div>
           </div>
 
+          {/* КЛАССИЧЕСКАЯ ФОРМА ПО НОМЕРУ ТЕЛЕФОНА */}
           <form onSubmit={handleSubmit} className="space-y-4">
             {isRegister && (
               <div>
@@ -263,7 +319,7 @@ export default function LoginPage() {
                 ) : (
                   <div className="space-y-2">
                     <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl text-[11px] text-blue-800 leading-snug">
-                      📞 Вам поступает входящий звонок. Введите <strong>последние 4 цифры</strong> входящего номера.
+                      📞 Вам поступает входящий звонок. Введите <strong>последние 4 цифры</strong> номера.
                     </div>
                     <input
                       type="text"
@@ -293,12 +349,13 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading || (isRegister && (!code || code.length !== 4))}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-3.5 rounded-xl shadow-lg shadow-blue-500/20 transition-all disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none cursor-pointer"
+              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs py-3.5 rounded-xl transition-all disabled:bg-slate-200 disabled:text-slate-400 cursor-pointer"
             >
-              {loading ? 'Обработка...' : isRegister ? 'Завершить регистрацию' : 'Войти'}
+              {loading ? 'Обработка...' : isRegister ? 'Завершить регистрацию' : 'Войти по паролю'}
             </button>
           </form>
 
+          {/* Переключение Вход / Регистрация */}
           <div className="text-center pt-2">
             <button
               type="button"
