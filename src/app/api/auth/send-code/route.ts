@@ -16,7 +16,7 @@ export async function POST(request: Request) {
 
     const clean10 = digitsOnly.slice(-10);
 
-    // --- ПРОВЕРКА В БАЗЕ ДАННЫХ ПЕРЕД ЗВОНКОМ ---
+    // Проверяем существование пользователя
     const existingUser = await sql`
       SELECT id FROM users
       WHERE regexp_replace(phone, '\D', '', 'g') LIKE ${`%${clean10}`}
@@ -25,85 +25,82 @@ export async function POST(request: Request) {
 
     if (action === 'register' && existingUser.length > 0) {
       return NextResponse.json(
-        { error: 'Пользователь с таким номером уже зарегистрирован. Пожалуйста, выполните вход.' },
+        { error: 'Пользователь с таким номером уже зарегистрирован. Пожалуйста, войдите.' },
         { status: 400 }
       );
     }
 
-    // Если звонок запрашивается для сброса пароля / входа, а пользователя нет
-    if (action === 'reset' && existingUser.length === 0) {
-      return NextResponse.json(
-        { error: 'Пользователь с таким номером не найден.' },
-        { status: 404 }
-      );
-    }
-
-    // Приводим к формату 79XXXXXXXXX
-    let formattedPhone = digitsOnly;
-    if (digitsOnly.length === 11 && (digitsOnly.startsWith('7') || digitsOnly.startsWith('8'))) {
-      formattedPhone = `7${digitsOnly.slice(1)}`;
-    }
-
     const publicKey = process.env.ZVONOK_PUBLIC_KEY;
-    const campaignId = process.env.ZVONOK_CAMPAIGN_ID || '1904628465';
+    const campaignId = process.env.ZVONOK_CAMPAIGN_ID || '2003856983';
 
     if (!publicKey) {
-      return NextResponse.json(
-        { error: 'ZVONOK_PUBLIC_KEY не указан в настройках' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'ZVONOK_PUBLIC_KEY не указан' }, { status: 500 });
     }
 
+    // Регистрируем ожидание звонка от клиента в Zvonok
     const formData = new URLSearchParams();
     formData.append('public_key', publicKey.trim());
-    formData.append('phone', `+${formattedPhone}`);
+    formData.append('phone', `+7${clean10}`);
     formData.append('campaign_id', campaignId.trim());
 
-    // 1. Вызов Flash Call
-    let res = await fetch('https://zvonok.com/manager/cabapi_external/api/v1/phones/flashcall/', {
+    const zvonokRes = await fetch('https://zvonok.com/manager/cabapi_external/api/v1/phones/call_in/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: formData.toString(),
     });
 
-    let data = await res.json();
+    const data = await zvonokRes.json();
 
-    // 2. Автоматический fallback на голосовой код, если в кабинете включен другой режим
-    if (!data.pincode && (data.error?.includes('campaign') || data.message?.includes('campaign') || data.status !== 'ok')) {
-      res = await fetch('https://zvonok.com/manager/cabapi_external/api/v1/phones/call_with_code/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: formData.toString(),
-      });
-      data = await res.json();
-    }
-
-    const pincode = data.pincode || data.data?.pincode || data.code;
-
-    if (!pincode) {
-      console.error('Ошибка Zvonok:', data);
-      const detail = data.message || data.error || JSON.stringify(data);
-      return NextResponse.json({ error: `Ошибка Zvonok: ${detail}` }, { status: 400 });
-    }
-
-    const code = String(pincode);
-
-    // Записываем код подтверждения в базу
-    await sql`
-      INSERT INTO phone_verification_codes (phone, code, expires_at)
-      VALUES (
-        ${`8${clean10}`}, 
-        ${code}, 
-        NOW() + INTERVAL '3 minutes'
-      )
-    `;
+    // Проверочный номер, на который клиенту нужно позвонить
+    const targetCallPhone = data.service_phone || data.data?.service_phone || '+78122420000';
+    const callId = data.call_id || data.data?.id || clean10;
 
     return NextResponse.json({
       success: true,
-      message: 'Вам поступает звонок. Введите последние 4 цифры входящего номера.',
+      targetCallPhone,
+      callId,
+      message: 'Пожалуйста, совершите бесплатный звонок на указанный номер',
     });
   } catch (err: any) {
-    console.error('Ошибка send-code:', err);
-    return NextResponse.json({ error: 'Ошибка сервера при отправке кода' }, { status: 500 });
+    console.error('Ошибка call_in:', err);
+    return NextResponse.json({ error: 'Ошибка сервиса звонков' }, { status: 500 });
+  }
+}
+
+// Эндпоинт для опроса: поступил ли звонок от клиента
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const phone = searchParams.get('phone');
+    const callId = searchParams.get('callId');
+
+    if (!phone) {
+      return NextResponse.json({ error: 'Номер телефона обязателен' }, { status: 400 });
+    }
+
+    const clean10 = phone.replace(/\D/g, '').slice(-10);
+    const publicKey = process.env.ZVONOK_PUBLIC_KEY;
+    const campaignId = process.env.ZVONOK_CAMPAIGN_ID || '2003856983';
+
+    if (!publicKey) {
+      return NextResponse.json({ verified: false });
+    }
+
+    // Проверяем статус входящего звонка в Zvonok API
+    const params = new URLSearchParams({
+      public_key: publicKey.trim(),
+      campaign_id: campaignId.trim(),
+      phone: `+7${clean10}`,
+    });
+
+    const checkRes = await fetch(`https://zvonok.com/manager/cabapi_external/api/v1/phones/call_in_status/?${params.toString()}`);
+    const data = await checkRes.json();
+
+    // Если звонок зафиксирован
+    const isConfirmed = data.status === 'confirmed' || data.data?.status === 'confirmed' || data.confirmed === true;
+
+    return NextResponse.json({ verified: isConfirmed });
+  } catch (err) {
+    return NextResponse.json({ verified: false });
   }
 }
