@@ -10,38 +10,43 @@ export async function POST(request: Request) {
     }
 
     const message = update.message;
-    const text = (message.text || '').trim();
+    const rawText = message.text || '';
     const chatId = message.chat.id;
-    const telegramId = String(message.from.id);
-    const firstName = message.from.first_name || '';
-    const lastName = message.from.last_name || '';
-    const username = message.from.username || '';
-    const fullName = [firstName, lastName].filter(Boolean).join(' ') || username || 'Гость';
+    const fromUser = message.from || {};
+    const telegramId = String(fromUser.id);
+    
+    // Формируем имя пользователя без ломающих спецсимволов
+    const firstName = fromUser.first_name || '';
+    const lastName = fromUser.last_name || '';
+    const fullName = [firstName, lastName].filter(Boolean).join(' ') || fromUser.username || `Пользователь #${telegramId.slice(-4)}`;
 
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
 
-    const sendMessage = async (replyText: string) => {
-      if (!botToken) return;
+    // Вспомогательная функция отправки сообщения в Telegram
+    const sendReply = async (text: string) => {
+      if (!botToken) {
+        console.error('TELEGRAM_BOT_TOKEN не задан в переменных');
+        return;
+      }
       try {
         await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chat_id: chatId,
-            text: replyText,
-            parse_mode: 'HTML',
+            text: text,
           }),
         });
-      } catch (err) {
-        console.error('Ошибка sendMessage TG:', err);
+      } catch (e) {
+        console.error('Ошибка отправки в Telegram API:', e);
       }
     };
 
     // 1. АВТОРИЗАЦИЯ С САЙТА: /start auth_XXXXXXXX
-    if (text.startsWith('/start auth_')) {
-      const token = text.replace('/start auth_', '').trim();
+    if (rawText.startsWith('/start auth_')) {
+      const token = rawText.replace('/start auth_', '').trim();
 
-      // Создаем пользователя в БД, если его еще нет
+      // Ищем или создаем пользователя в БД
       let userRows = await sql`
         SELECT id, name, phone, role FROM users
         WHERE telegram_id = ${telegramId} OR phone = ${`tg_${telegramId}`}
@@ -58,9 +63,15 @@ export async function POST(request: Request) {
         currentUser = inserted[0];
       } else {
         currentUser = userRows[0];
+        // Привязываем telegram_id если его не было
+        await sql`
+          UPDATE users 
+          SET telegram_id = ${telegramId} 
+          WHERE id = ${currentUser.id}::uuid
+        `;
       }
 
-      // Сохраняем сессию как авторизованную
+      // Сохраняем авторизованную сессию в БД
       await sql`
         INSERT INTO telegram_auth_sessions (token, status, user_id, user_data)
         VALUES (${token}, 'authorized', ${currentUser.id}::uuid, ${JSON.stringify(currentUser)}::jsonb)
@@ -70,25 +81,25 @@ export async function POST(request: Request) {
             user_data = ${JSON.stringify(currentUser)}::jsonb
       `;
 
-      // Бот отправляет сообщение в диалог Telegram
-      await sendMessage(
-        `✅ <b>Авторизация прошла успешно!</b>\n\nЗдравствуйте, <b>${fullName}</b>!\nВы успешно вошли на сайт <b>«Райский Пляж»</b>.\n\nМожете возвращаться в браузер — сайт уже открыт в вашем профиле.`
+      // Отправляем подтверждение в чат боту
+      await sendReply(
+        `✅ Авторизация прошла успешно!\n\nЗдравствуйте, ${fullName}!\nВы успешно вошли на сайт «Райский Пляж».\n\nМожете возвращаться в браузер — сайт уже открыт в вашем профиле.`
       );
 
       return NextResponse.json({ ok: true });
     }
 
-    // 2. ОБЫЧНАЯ КОМАНДА /start
-    if (text === '/start') {
-      await sendMessage(
-        `👋 Здравствуйте, <b>${fullName}</b>!\n\nЭто официальный бот сервиса бронирования <b>«Райский Пляж»</b>.`
+    // 2. ОБЫЧНЫЙ /start
+    if (rawText === '/start') {
+      await sendReply(
+        `👋 Здравствуйте, ${fullName}!\n\nЭто официальный бот сервиса бронирования «Райский Пляж».\nЗдесь вы будете получать важные уведомления о статусе ваших бронирований.`
       );
       return NextResponse.json({ ok: true });
     }
 
     return NextResponse.json({ ok: true });
   } catch (error: any) {
-    console.error('Критическая ошибка Telegram Webhook:', error);
+    console.error('Ошибка webhook Telegram:', error);
     return NextResponse.json({ ok: true });
   }
 }
