@@ -5,7 +5,6 @@ export async function POST(request: Request) {
   try {
     const update = await request.json();
 
-    // Проверяем наличие сообщения
     if (!update || !update.message) {
       return NextResponse.json({ ok: true });
     }
@@ -21,7 +20,6 @@ export async function POST(request: Request) {
 
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
 
-    // Вспомогательная функция отправки сообщения в Telegram
     const sendMessage = async (chat_id: number | string, replyText: string) => {
       if (!botToken) return;
       try {
@@ -35,30 +33,15 @@ export async function POST(request: Request) {
           }),
         });
       } catch (err) {
-        console.error('Ошибка отправки сообщения TG:', err);
+        console.error('Ошибка отправки в TG:', err);
       }
     };
 
-    // 1. ОБРАБОТКА АВТОРИЗАЦИИ ПО ССЫЛКЕ С САЙТА (/start auth_...)
+    // ОБРАБОТКА ВХОДА С САЙТА: /start auth_токен
     if (text.startsWith('/start auth_')) {
       const token = text.replace('/start auth_', '').trim();
 
-      // Проверяем, существует ли такая сессия ожидания
-      const sessionRows = await sql`
-        SELECT token, status FROM telegram_auth_sessions
-        WHERE token = ${token} AND status = 'pending'
-        LIMIT 1
-      `;
-
-      if (sessionRows.length === 0) {
-        await sendMessage(
-          chatId,
-          '⚠️ <b>Время сессии авторизации истекло.</b>\nПожалуйста, вернитесь на сайт и нажмите кнопку «Войти через Telegram» заново.'
-        );
-        return NextResponse.json({ ok: true });
-      }
-
-      // Ищем или регистрируем пользователя в таблице users
+      // Проверяем наличие пользователя в базе
       const existingUser = await sql`
         SELECT id, name, phone, role FROM users
         WHERE telegram_id = ${telegramId} OR phone = ${`tg_${telegramId}`}
@@ -77,7 +60,7 @@ export async function POST(request: Request) {
         currentUser = newUser[0];
       }
 
-      // Обновляем статус сессии на authorized и сохраняем данные пользователя
+      // Обновляем сессию для сайта
       await sql`
         UPDATE telegram_auth_sessions
         SET status = 'authorized',
@@ -86,27 +69,27 @@ export async function POST(request: Request) {
         WHERE token = ${token}
       `;
 
-      // Отправляем пользователю приятное подтверждение в чат
+      // Бот отправляет сообщение пользователю прямо в Telegram
       await sendMessage(
         chatId,
-        `🎉 <b>Добро пожаловать, ${fullName}!</b>\n\nВход на сайт <b>«Райский Пляж»</b> успешно выполнен.\nМожете возвращаться в браузер — ваша страница уже открыта!`
+        `✅ <b>Авторизация прошла успешно!</b>\n\nРады видеть вас, <b>${fullName}</b>!\nВы можете вернуться на сайт <b>«Райский Пляж»</b> — вы уже вошли в свой профиль.`
       );
 
       return NextResponse.json({ ok: true });
     }
 
-    // 2. ОБЫЧНАЯ КОМАНДА /start (без параметров)
+    // ОБЫЧНЫЙ /start
     if (text === '/start') {
       await sendMessage(
         chatId,
-        `👋 Здравствуйте, <b>${fullName}</b>!\n\nЭто официальный бот сервиса бронирования <b>«Райский Пляж»</b>.\nЗдесь вы будете получать уведомления о бронированиях и можете авторизоваться на сайте в 1 клик.`
+        `👋 Здравствуйте, <b>${fullName}</b>!\n\nЭто официальный бот сервиса <b>«Райский Пляж»</b>.\nЗдесь будут приходить уведомления о бронированиях.`
       );
       return NextResponse.json({ ok: true });
     }
 
     return NextResponse.json({ ok: true });
   } catch (error: any) {
-    console.error('Ошибка в telegram webhook:', error);
-    return NextResponse.json({ ok: true }); // Всегда возвращаем 200/ok для Telegram, чтобы он не спамил повторами
+    console.error('Ошибка в webhook:', error);
+    return NextResponse.json({ ok: true });
   }
 }

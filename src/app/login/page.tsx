@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { Waves, Phone, Lock, User, PhoneCall, Loader2, CheckCircle2 } from 'lucide-react';
+import { Waves, Phone, Lock, User, PhoneCall, Loader2, CheckCircle2, ArrowRight } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -17,12 +17,12 @@ export default function LoginPage() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
 
-  // Состояния звонка от клиента
+  // Звонок от клиента
   const [waitingCall, setWaitingCall] = useState(false);
   const [targetPhone, setTargetPhone] = useState('+7 (930) 555-86-07');
   const [callVerified, setCallVerified] = useState(false);
 
-  // Telegram states
+  // Telegram
   const [tgLoading, setTgLoading] = useState(false);
   const [tgWaiting, setTgWaiting] = useState(false);
 
@@ -45,7 +45,34 @@ export default function LoginPage() {
     };
   }, []);
 
-  // 1. Авторизация через Telegram Deep-Link
+  // Форматирование номера телефона в красивый формат: +7 (999) 000-00-00
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target.value.replace(/\D/g, '');
+    let clean = input;
+
+    if (clean.startsWith('7') || clean.startsWith('8')) {
+      clean = clean.slice(1);
+    }
+    clean = clean.slice(0, 10); // Строго максимум 10 цифр после +7
+
+    let formatted = '+7';
+    if (clean.length > 0) {
+      formatted += ` (${clean.slice(0, 3)}`;
+    }
+    if (clean.length >= 4) {
+      formatted += `) ${clean.slice(3, 6)}`;
+    }
+    if (clean.length >= 7) {
+      formatted += `-${clean.slice(6, 8)}`;
+    }
+    if (clean.length >= 9) {
+      formatted += `-${clean.slice(8, 10)}`;
+    }
+
+    setPhone(clean.length === 0 ? '' : formatted);
+  };
+
+  // Вход через Telegram
   const handleTelegramLogin = async () => {
     setErrorMsg('');
     setTgLoading(true);
@@ -54,7 +81,7 @@ export default function LoginPage() {
       const res = await fetch('/api/auth/tg-session', { method: 'POST' });
       const data = await res.json();
 
-      if (!res.ok || !data.tgUrl) throw new Error(data.error || 'Ошибка сессии TG');
+      if (!res.ok || !data.tgUrl) throw new Error(data.error || 'Ошибка создания сессии');
 
       setTgWaiting(true);
       window.open(data.tgUrl, '_blank');
@@ -76,13 +103,15 @@ export default function LoginPage() {
     } catch (err: any) {
       setErrorMsg(err.message || 'Не удалось открыть Telegram');
       setTgLoading(false);
+      setTgWaiting(false);
     }
   };
 
-  // 2. Запрос проверочного номера для звонка
+  // Запуск проверки звонком
   const handleInitClientCall = async () => {
-    if (!phone || phone.replace(/\D/g, '').length < 10) {
-      setErrorMsg('Введите корректный номер телефона');
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length < 11) {
+      setErrorMsg('Введите полный номер телефона (10 цифр)');
       return;
     }
 
@@ -97,12 +126,11 @@ export default function LoginPage() {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Ошибка проверки');
+      if (!res.ok) throw new Error(data.error || 'Ошибка проверки номера');
 
       setTargetPhone(data.targetCallPhone || '+7 (930) 555-86-07');
       setWaitingCall(true);
 
-      // Запускаем опрос статуса звонка
       callCheckIntervalRef.current = setInterval(async () => {
         try {
           const statusRes = await fetch(`/api/auth/send-code?phone=${encodeURIComponent(phone)}`);
@@ -118,13 +146,13 @@ export default function LoginPage() {
         }
       }, 2000);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Ошибка запуска верификации');
+      setErrorMsg(err.message || 'Ошибка сервиса звонков');
     } finally {
       setLoading(false);
     }
   };
 
-  // 3. Отправка формы регистрации/входа
+  // Авторизация / Регистрация
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -150,7 +178,7 @@ export default function LoginPage() {
       login(data.user);
       router.push(data.user.role === 'landlord' ? '/dashboard' : '/');
     } catch (err: any) {
-      setErrorMsg(err.message || 'Ошибка');
+      setErrorMsg(err.message || 'Ошибка авторизации');
     } finally {
       setLoading(false);
     }
@@ -202,7 +230,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Быстрый вход через Telegram */}
+          {/* Быстрый вход через Telegram в 1 клик */}
           <div className="space-y-3">
             <button
               type="button"
@@ -217,10 +245,10 @@ export default function LoginPage() {
             </button>
 
             {tgWaiting && (
-              <div className="p-3.5 bg-blue-50 border border-blue-100 rounded-2xl flex items-center space-x-3 text-left animate-pulse">
+              <div className="p-3.5 bg-blue-50 border border-blue-100 rounded-2xl flex items-center space-x-3 text-left">
                 <Loader2 className="w-5 h-5 text-blue-600 animate-spin flex-shrink-0" />
                 <p className="text-xs text-blue-800 font-medium leading-relaxed">
-                  Нажмите <b>«Запустить» (Start)</b> в открывшемся Telegram-боте для мгновенного входа...
+                  Нажмите <b>«Запустить» (Start)</b> в открывшемся боте — страница автоматически откроется.
                 </p>
               </div>
             )}
@@ -259,7 +287,7 @@ export default function LoginPage() {
                   required
                   placeholder="+7 (999) 000-00-00"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  onChange={handlePhoneChange}
                   className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 font-semibold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
               </div>
@@ -280,7 +308,7 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Блок подтверждения входящим звонком от клиента */}
+            {/* Подтверждение входящим звонком от клиента */}
             {isRegister && (
               <div className="pt-1 space-y-3">
                 {!waitingCall && !callVerified && (
@@ -327,7 +355,7 @@ export default function LoginPage() {
               disabled={loading || (isRegister && !callVerified)}
               className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs py-3.5 rounded-xl transition-all disabled:bg-slate-200 disabled:text-slate-400 cursor-pointer"
             >
-              {loading ? 'Обработка...' : isRegister ? 'Завершить регистрацию' : 'Войти по паролю'}
+              {loading ? 'Обработка...' : isRegister ? 'Завершить регистрацию' : 'Войти'}
             </button>
           </form>
 
