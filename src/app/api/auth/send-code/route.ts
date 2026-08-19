@@ -13,10 +13,10 @@ export async function POST(request: Request) {
     const clean10 = digitsOnly.slice(-10);
 
     if (clean10.length < 10) {
-      return NextResponse.json({ error: 'Введите корректный номер телефона (10 цифр)' }, { status: 400 });
+      return NextResponse.json({ error: 'Введите номер телефона (10 цифр)' }, { status: 400 });
     }
 
-    // 1. Проверяем в БД: не занят ли номер
+    // 1. Проверяем в базе
     const existingUser = await sql`
       SELECT id FROM users
       WHERE regexp_replace(phone, '\D', '', 'g') LIKE ${`%${clean10}`}
@@ -34,16 +34,16 @@ export async function POST(request: Request) {
     const campaignId = process.env.ZVONOK_CAMPAIGN_ID || '2003856983';
 
     if (!publicKey) {
-      return NextResponse.json({ error: 'Ключ ZVONOK_PUBLIC_KEY не задан в переменных Vercel' }, { status: 500 });
+      return NextResponse.json({ error: 'ZVONOK_PUBLIC_KEY не задан в переменных Vercel' }, { status: 500 });
     }
 
-    // 2. Отправляем запрос в Zvonok для создания ожидания звонка от клиента
+    // 2. Вызываем официальный endpoint Zvonok для проверочного номера: /phones/confirm/
     const formData = new URLSearchParams();
     formData.append('public_key', publicKey.trim());
     formData.append('phone', `+7${clean10}`);
     formData.append('campaign_id', campaignId.trim());
 
-    const zvonokRes = await fetch('https://zvonok.com/manager/cabapi_external/api/v1/phones/call_in/', {
+    const zvonokRes = await fetch('https://zvonok.com/manager/cabapi_external/api/v1/phones/confirm/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: formData.toString(),
@@ -51,44 +51,48 @@ export async function POST(request: Request) {
 
     const data = await zvonokRes.json();
 
-    // Проверочный номер из ответа Zvonok или общий проверочный номер по умолчанию
-    const targetCallPhone = data.service_phone || data.data?.service_phone || '+7 (930) 555-86-07';
+    if (data.status !== 'ok' && data.status !== 'success' && !data.data) {
+      console.error('Ошибка Zvonok /confirm/:', data);
+      const msg = data.data?.message || data.message || JSON.stringify(data);
+      return NextResponse.json({ error: `Ошибка Zvonok: ${msg}` }, { status: 400 });
+    }
+
+    const callId = data.data?.call_id || data.call_id || clean10;
+    // Номер из кампании Zvonok для звонков клиентов
+    const targetCallPhone = data.data?.service_phone || data.service_phone || '+7 (930) 555-86-07';
 
     return NextResponse.json({
       success: true,
+      callId,
       targetCallPhone,
-      message: 'Пожалуйста, совершите бесплатный звонок на проверочный номер.',
+      message: 'Позвоните на проверочный номер',
     });
   } catch (err: any) {
-    console.error('Ошибка send-code:', err);
+    console.error('Критическая ошибка send-code:', err);
     return NextResponse.json({ error: 'Ошибка сервера при подключении к сервису звонков' }, { status: 500 });
   }
 }
 
-// Опрос: зафиксирован ли входящий звонок
+// Проверка статуса звонка
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const phone = searchParams.get('phone');
+    const callId = searchParams.get('callId');
 
-    if (!phone) return NextResponse.json({ verified: false });
+    if (!phone && !callId) return NextResponse.json({ verified: false });
 
-    const clean10 = phone.replace(/\D/g, '').slice(-10);
     const publicKey = process.env.ZVONOK_PUBLIC_KEY;
-    const campaignId = process.env.ZVONOK_CAMPAIGN_ID || '2003856983';
-
     if (!publicKey) return NextResponse.json({ verified: false });
 
-    const params = new URLSearchParams({
-      public_key: publicKey.trim(),
-      campaign_id: campaignId.trim(),
-      phone: `+7${clean10}`,
-    });
-
-    const checkRes = await fetch(`https://zvonok.com/manager/cabapi_external/api/v1/phones/call_in_status/?${params.toString()}`);
+    // Проверяем по call_by_id или call_id в Zvonok
+    let checkUrl = `https://zvonok.com/manager/cabapi_external/api/v1/phones/call_by_id/?public_key=${publicKey.trim()}&call_id=${callId}`;
+    
+    const checkRes = await fetch(checkUrl);
     const data = await checkRes.json();
 
-    const isConfirmed = data.status === 'confirmed' || data.data?.status === 'confirmed' || data.confirmed === true;
+    const status = data.data?.status || data.status;
+    const isConfirmed = status === 'completed' || status === 'confirmed' || status === 'success' || data.data?.confirmed === true;
 
     return NextResponse.json({ verified: isConfirmed });
   } catch (err) {

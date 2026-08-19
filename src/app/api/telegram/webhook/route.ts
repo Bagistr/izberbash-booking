@@ -10,7 +10,7 @@ export async function POST(request: Request) {
     }
 
     const message = update.message;
-    const text = message.text || '';
+    const text = (message.text || '').trim();
     const chatId = message.chat.id;
     const telegramId = String(message.from.id);
     const firstName = message.from.first_name || '';
@@ -20,76 +20,75 @@ export async function POST(request: Request) {
 
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
 
-    const sendMessage = async (chat_id: number | string, replyText: string) => {
+    const sendMessage = async (replyText: string) => {
       if (!botToken) return;
       try {
         await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            chat_id,
+            chat_id: chatId,
             text: replyText,
             parse_mode: 'HTML',
           }),
         });
       } catch (err) {
-        console.error('Ошибка отправки в TG:', err);
+        console.error('Ошибка sendMessage TG:', err);
       }
     };
 
-    // ОБРАБОТКА ВХОДА С САЙТА: /start auth_токен
+    // 1. АВТОРИЗАЦИЯ С САЙТА: /start auth_XXXXXXXX
     if (text.startsWith('/start auth_')) {
       const token = text.replace('/start auth_', '').trim();
 
-      // Проверяем наличие пользователя в базе
-      const existingUser = await sql`
+      // Создаем пользователя в БД, если его еще нет
+      let userRows = await sql`
         SELECT id, name, phone, role FROM users
         WHERE telegram_id = ${telegramId} OR phone = ${`tg_${telegramId}`}
         LIMIT 1
       `;
 
       let currentUser;
-      if (existingUser.length > 0) {
-        currentUser = existingUser[0];
-      } else {
-        const newUser = await sql`
+      if (userRows.length === 0) {
+        const inserted = await sql`
           INSERT INTO users (name, phone, role, telegram_id)
           VALUES (${fullName}, ${`tg_${telegramId}`}, 'guest', ${telegramId})
           RETURNING id, name, phone, role
         `;
-        currentUser = newUser[0];
+        currentUser = inserted[0];
+      } else {
+        currentUser = userRows[0];
       }
 
-      // Обновляем сессию для сайта
+      // Сохраняем сессию как авторизованную
       await sql`
-        UPDATE telegram_auth_sessions
+        INSERT INTO telegram_auth_sessions (token, status, user_id, user_data)
+        VALUES (${token}, 'authorized', ${currentUser.id}::uuid, ${JSON.stringify(currentUser)}::jsonb)
+        ON CONFLICT (token) DO UPDATE 
         SET status = 'authorized',
             user_id = ${currentUser.id}::uuid,
             user_data = ${JSON.stringify(currentUser)}::jsonb
-        WHERE token = ${token}
       `;
 
-      // Бот отправляет сообщение пользователю прямо в Telegram
+      // Бот отправляет сообщение в диалог Telegram
       await sendMessage(
-        chatId,
-        `✅ <b>Авторизация прошла успешно!</b>\n\nРады видеть вас, <b>${fullName}</b>!\nВы можете вернуться на сайт <b>«Райский Пляж»</b> — вы уже вошли в свой профиль.`
+        `✅ <b>Авторизация прошла успешно!</b>\n\nЗдравствуйте, <b>${fullName}</b>!\nВы успешно вошли на сайт <b>«Райский Пляж»</b>.\n\nМожете возвращаться в браузер — сайт уже открыт в вашем профиле.`
       );
 
       return NextResponse.json({ ok: true });
     }
 
-    // ОБЫЧНЫЙ /start
+    // 2. ОБЫЧНАЯ КОМАНДА /start
     if (text === '/start') {
       await sendMessage(
-        chatId,
-        `👋 Здравствуйте, <b>${fullName}</b>!\n\nЭто официальный бот сервиса <b>«Райский Пляж»</b>.\nЗдесь будут приходить уведомления о бронированиях.`
+        `👋 Здравствуйте, <b>${fullName}</b>!\n\nЭто официальный бот сервиса бронирования <b>«Райский Пляж»</b>.`
       );
       return NextResponse.json({ ok: true });
     }
 
     return NextResponse.json({ ok: true });
   } catch (error: any) {
-    console.error('Ошибка в webhook:', error);
+    console.error('Критическая ошибка Telegram Webhook:', error);
     return NextResponse.json({ ok: true });
   }
 }
