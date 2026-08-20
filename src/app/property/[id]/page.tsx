@@ -25,6 +25,11 @@ export default function PropertyDetailPage() {
   const [isBookingOpen, setIsBookingOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Отзывы и Уровень Рахата
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [avgRating, setAvgRating] = useState<number>(5.0);
+  const [reviewsTotal, setReviewsTotal] = useState<number>(0);
+
   // Полноэкранная галерея (Lightbox)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
@@ -38,6 +43,15 @@ export default function PropertyDetailPage() {
           const list: Property[] = await res.json();
           const found = list.find((p) => String(p.id) === String(id));
           setProperty(found || null);
+        }
+
+        // Загрузка реальных отзывов
+        const resRev = await fetch(`/api/reviews?propertyId=${id}`);
+        if (resRev.ok) {
+          const rData = await resRev.json();
+          setReviews(rData.reviews || []);
+          setAvgRating(rData.avgRating ? Number(rData.avgRating) : 5.0);
+          setReviewsTotal(rData.total || 0);
         }
       } catch (err) {
         console.error('Ошибка загрузки объекта:', err);
@@ -161,9 +175,11 @@ export default function PropertyDetailPage() {
 
           <div className="flex flex-wrap items-center text-xs sm:text-sm text-slate-600 font-medium gap-y-1">
             <div className="flex items-center text-slate-900 font-bold mr-2">
-              <Star className="w-4 h-4 text-amber-500 fill-amber-500 mr-1" />
-              <span>4.95</span>
-              <span className="text-slate-500 font-normal ml-1">(18 отзывов)</span>
+              <span className="text-amber-500 mr-1 text-sm">☀️</span>
+              <span>{avgRating ? avgRating.toFixed(1) : '5.0'} Рахата</span>
+              <span className="text-slate-500 font-normal ml-1">
+                {reviewsTotal > 0 ? `(${reviewsTotal} ${reviewsTotal === 1 ? 'отзыв' : reviewsTotal < 5 ? 'отзыва' : 'отзывов'})` : '• Новинка'}
+              </span>
             </div>
             <span className="mx-2 text-slate-300 hidden sm:inline">•</span>
             <div className="flex items-center">
@@ -193,7 +209,7 @@ export default function PropertyDetailPage() {
               {/* Главное фото слева (50% ширины) */}
               <div
                 onClick={() => setLightboxIndex(0)}
-                className="md:col-span-6 relative h-full cursor-pointer overflow-hidden group"
+                className="relative h-full md:col-span-6 cursor-pointer overflow-hidden group"
               >
                 <img
                   src={photos[0]}
@@ -243,7 +259,7 @@ export default function PropertyDetailPage() {
           )}
         </div>
 
-        {/* НИЖНЯЯ ЧАСТЬ (Описание, Удобства, Карточка бронирования) */}
+        {/* НИЖНЯЯ ЧАСТЬ (Описание, Удобства, Отзывы, Карточка бронирования) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-8">
             <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm">
@@ -270,6 +286,80 @@ export default function PropertyDetailPage() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* БЛОК ОТЗЫВОВ И УРОВЕНЬ РАХАТА ☀️ */}
+            <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+                <div>
+                  <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                    <span>Отзывы гостей и Уровень Рахата</span>
+                    <span>☀️</span>
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Честные отзывы от туристов, подтвердивших проживание через сервис
+                  </p>
+                </div>
+
+                <div className="inline-flex items-center gap-2 bg-amber-50 border border-amber-200 px-3.5 py-1.5 rounded-2xl">
+                  <span className="text-xl font-black text-amber-900">{avgRating ? avgRating.toFixed(1) : '5.0'}</span>
+                  <div className="text-[10px] leading-tight text-amber-800 font-bold">
+                    <p>из 5.0 Рахата</p>
+                    <p className="text-slate-400 font-normal">{reviewsTotal} {reviewsTotal === 1 ? 'отзыв' : 'отзывов'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Список отзывов */}
+              {reviews.length === 0 ? (
+                <div className="text-center py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200 p-6 space-y-2">
+                  <span className="text-3xl">🏖️</span>
+                  <p className="text-sm font-bold text-slate-700">Пока нет отзывов для этого объекта</p>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto">
+                    Вы можете стать первым! После завершения поездки оцените уровень комфорта в разделе «Мои поездки».
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {reviews.map((rev) => (
+                    <div key={rev.id} className="p-5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-800 font-bold text-xs flex items-center justify-center">
+                            {(rev.author_name || 'Г')[0].toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-slate-900">{rev.author_name || 'Гость сервиса'}</p>
+                            <p className="text-[10px] text-slate-400">
+                              {rev.created_at ? new Date(rev.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Недавно'}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="inline-flex items-center gap-1 bg-amber-100/70 border border-amber-200 text-amber-900 px-2.5 py-1 rounded-xl text-xs font-bold">
+                          <span>☀️</span>
+                          <span>{Number(rev.rating)} / 5</span>
+                        </div>
+                      </div>
+
+                      <p className="text-xs sm:text-sm text-slate-700 leading-relaxed font-medium">
+                        {rev.comment}
+                      </p>
+
+                      {/* Ответ хозяина жилья */}
+                      {rev.host_reply && (
+                        <div className="bg-blue-50 border border-blue-100 p-3.5 rounded-xl text-xs text-blue-950 space-y-1">
+                          <p className="font-bold text-blue-800 text-[11px] flex items-center gap-1">
+                            <span>Ответ владельца</span>
+                            <ShieldCheck className="w-3 h-3 text-blue-600 inline" />
+                          </p>
+                          <p className="text-blue-900 italic">«{rev.host_reply}»</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

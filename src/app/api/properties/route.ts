@@ -12,11 +12,33 @@ export async function GET() {
     `;
 
     const units = await sql`SELECT * FROM property_units`;
+    let reviewsSummary: any[] = [];
+    try {
+      reviewsSummary = await sql`
+        SELECT 
+          property_id, 
+          ROUND(AVG(rating)::numeric, 1) as avg_rating, 
+          COUNT(id)::int as count 
+        FROM reviews 
+        GROUP BY property_id
+      `;
+    } catch (e) {
+      // Игнорируем, если таблица еще пуста
+    }
 
-    const propertiesWithUnits = properties.map((p) => ({
-      ...p,
-      units: units.filter((u) => u.property_id === p.id),
-    }));
+    const reviewMap = new Map(
+      reviewsSummary.map((r: any) => [String(r.property_id), { rating: Number(r.avg_rating), count: Number(r.count) }])
+    );
+
+    const propertiesWithUnits = properties.map((p) => {
+      const rev = reviewMap.get(String(p.id));
+      return {
+        ...p,
+        rating: rev ? rev.rating : 5.0,
+        reviews_count: rev ? rev.count : 0,
+        units: units.filter((u) => u.property_id === p.id),
+      };
+    });
 
     return NextResponse.json(propertiesWithUnits);
   } catch (error) {

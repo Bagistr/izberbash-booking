@@ -26,13 +26,15 @@ export async function GET(request: Request) {
         b.status,
         b.created_at,
         p.title as property_title,
-        p.location as property_location,
-        p.images as property_images,
+        p.address as property_address,
+        p.photos as property_photos,
         p.price_per_night,
+        p.landlord_phone as host_phone,
         u_host.name as host_name,
-        u_host.phone as host_phone,
         r.id as review_id,
-        r.rating as review_rating
+        r.rating as review_rating,
+        r.comment as review_comment,
+        r.host_reply
       FROM bookings b
       JOIN properties p ON b.property_id = p.id
       LEFT JOIN users u_host ON p.owner_id = u_host.id

@@ -7,7 +7,8 @@ import { useAuth } from '@/context/AuthContext';
 import {
   Waves, DollarSign, TrendingUp, Users, Calendar as CalendarIcon,
   Plus, LogOut, Edit3, Eye, EyeOff, ChevronLeft, ChevronRight,
-  X, Lock, Unlock, Phone, User, PlusCircle, CreditCard, ArrowUpRight
+  X, Lock, Unlock, Phone, User, PlusCircle, CreditCard, ArrowUpRight,
+  Star, MessageSquare, CornerDownRight, Sparkles, Send, Loader2
 } from 'lucide-react';
 import { Property } from '@/types/property';
 
@@ -85,6 +86,12 @@ export default function DashboardPage() {
   const [editFormData, setEditFormData] = useState<any>(null);
   const [savingEdit, setSavingEdit] = useState(false);
 
+  // Отзывы гостей и ответы владельца
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [replyingReviewId, setReplyingReviewId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState('');
+  const [savingReply, setSavingReply] = useState(false);
+
   const loadData = useCallback(async (phone: string) => {
     try {
       const res = await fetch(`/api/landlord/properties?phone=${encodeURIComponent(phone)}`);
@@ -100,6 +107,13 @@ export default function DashboardPage() {
             property_id: prev.property_id || data.properties[0].id,
           }));
         }
+      }
+
+      // Загрузка отзывов для всех объектов владельца
+      const reviewsRes = await fetch(`/api/reviews?ownerPhone=${encodeURIComponent(phone)}`);
+      if (reviewsRes.ok) {
+        const revData = await reviewsRes.json();
+        setReviews(revData.reviews || []);
       }
 
       // Загрузка баланса
@@ -322,6 +336,27 @@ export default function DashboardPage() {
       setProperties((prev) =>
         prev.map((item) => (item.id === p.id ? { ...item, is_active: !updatedStatus } : item))
       );
+    }
+  };
+
+  const handleSendReply = async (reviewId: string) => {
+    if (!replyText.trim()) return;
+    setSavingReply(true);
+    try {
+      const res = await fetch('/api/reviews', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reviewId, hostReply: replyText.trim() }),
+      });
+      if (res.ok) {
+        setReplyingReviewId(null);
+        setReplyText('');
+        if (user?.phone) loadData(user.phone);
+      }
+    } catch (e) {
+      console.error('Ошибка отправки ответа:', e);
+    } finally {
+      setSavingReply(false);
     }
   };
 
@@ -632,6 +667,133 @@ export default function DashboardPage() {
                   </div>
                 );
               })}
+            </div>
+          )}
+        </div>
+
+        {/* 5. ОТЗЫВЫ ГОСТЕЙ И УРОВЕНЬ РАХАТА */}
+        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <span>Отзывы гостей и рейтинг «Уровень Рахата»</span>
+                <span>☀️</span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Отзывы путешественников на ваши объекты. Отвечайте гостям для укрепления репутации!
+              </p>
+            </div>
+            <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-xl self-start sm:self-auto">
+              Всего отзывов: {reviews.length}
+            </span>
+          </div>
+
+          {reviews.length === 0 ? (
+            <div className="text-center py-10 bg-slate-50 rounded-2xl border border-dashed border-slate-200 p-6 space-y-2">
+              <span className="text-3xl">🏖️</span>
+              <p className="text-sm font-bold text-slate-700">Пока нет отзывов от гостей</p>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                Когда туристы проживут в ваших домиках и выставят оценку «Уровень Рахата», отзывы появятся здесь.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {reviews.map((rev) => (
+                <div key={rev.id} className="p-5 rounded-2xl border border-slate-200 bg-slate-50/60 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-900 text-sm">{rev.author_name || 'Гость'}</span>
+                        <span className="text-xs text-slate-400">• {rev.property_title}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400">
+                        {rev.created_at ? new Date(rev.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Недавно'}
+                      </p>
+                    </div>
+
+                    <div className="inline-flex items-center gap-1.5 bg-amber-100/70 border border-amber-200 text-amber-900 px-3 py-1 rounded-xl text-xs font-bold self-start sm:self-auto">
+                      <span>☀️</span>
+                      <span>{Number(rev.rating)} / 5 Рахата</span>
+                    </div>
+                  </div>
+
+                  <p className="text-xs sm:text-sm text-slate-700 font-medium leading-relaxed">
+                    «{rev.comment}»
+                  </p>
+
+                  {/* Блок ответа хозяина */}
+                  {rev.host_reply ? (
+                    <div className="bg-blue-50/80 border border-blue-100 p-3.5 rounded-xl space-y-1">
+                      <div className="flex items-center justify-between">
+                        <p className="font-bold text-blue-900 text-xs flex items-center gap-1">
+                          <CornerDownRight className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Ваш официальный ответ:</span>
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReplyingReviewId(rev.id);
+                            setReplyText(rev.host_reply);
+                          }}
+                          className="text-[11px] font-bold text-blue-600 hover:underline cursor-pointer"
+                        >
+                          Изменить
+                        </button>
+                      </div>
+                      <p className="text-xs text-blue-950 italic">«{rev.host_reply}»</p>
+                    </div>
+                  ) : null}
+
+                  {/* Форма ответа */}
+                  {replyingReviewId === rev.id ? (
+                    <div className="pt-2 space-y-2">
+                      <label className="block text-[11px] font-bold text-slate-600 uppercase">
+                        {rev.host_reply ? 'Редактировать ответ' : 'Ваш ответ гостю (будет виден на странице жилья)'}
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                        placeholder="Например: Спасибо за тёплые слова! Будем рады видеть вас снова ☀️"
+                        className="w-full text-xs bg-white border border-slate-300 rounded-xl p-3 font-medium text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none"
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSendReply(rev.id)}
+                          disabled={savingReply || !replyText.trim()}
+                          className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        >
+                          {savingReply ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                          <span>Сохранить ответ</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReplyingReviewId(null);
+                            setReplyText('');
+                          }}
+                          className="text-slate-500 hover:text-slate-700 text-xs font-bold px-3 py-2 rounded-xl transition-colors cursor-pointer"
+                        >
+                          Отмена
+                        </button>
+                      </div>
+                    </div>
+                  ) : !rev.host_reply ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReplyingReviewId(rev.id);
+                        setReplyText('');
+                      }}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer pt-1"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      <span>Ответить гостю</span>
+                    </button>
+                  ) : null}
+                </div>
+              ))}
             </div>
           )}
         </div>

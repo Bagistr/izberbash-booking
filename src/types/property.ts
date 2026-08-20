@@ -20,5 +20,7 @@ export interface Property {
   landlord_phone: string;
   is_active: boolean;
   units?: PropertyUnit[];
+  rating?: number;
+  reviews_count?: number;
   created_at?: string;
 }

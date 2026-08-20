@@ -9,8 +9,33 @@ export const dynamic = 'force-dynamic';
 
 async function getProperties(): Promise<Property[]> {
   try {
-    const rows = await sql`SELECT * FROM properties WHERE is_active = true ORDER BY created_at DESC`;
-    return rows as Property[];
+    const properties = await sql`SELECT * FROM properties WHERE is_active = true ORDER BY created_at DESC`;
+    let reviewsSummary: any[] = [];
+    try {
+      reviewsSummary = await sql`
+        SELECT 
+          property_id, 
+          ROUND(AVG(rating)::numeric, 1) as avg_rating, 
+          COUNT(id)::int as count 
+        FROM reviews 
+        GROUP BY property_id
+      `;
+    } catch (e) {
+      // Таблица отзывов еще пуста или создается
+    }
+
+    const reviewMap = new Map(
+      reviewsSummary.map((r: any) => [String(r.property_id), { rating: Number(r.avg_rating), count: Number(r.count) }])
+    );
+
+    return properties.map((p: any) => {
+      const rev = reviewMap.get(String(p.id));
+      return {
+        ...p,
+        rating: rev ? rev.rating : 5.0,
+        reviews_count: rev ? rev.count : 0,
+      };
+    }) as Property[];
   } catch (err) {
     console.error('Ошибка получения данных из Neon:', err);
     return [];

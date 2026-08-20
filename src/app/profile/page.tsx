@@ -192,8 +192,17 @@ export default function ProfilePage() {
         {/* ИСТОРИЯ ПОЕЗДОК И БРОНЕЙ */}
         <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-black text-slate-900">Мои бронирования</h2>
-            <span className="text-xs font-bold text-slate-400">{bookings.length} поездок</span>
+            <div>
+              <h2 className="text-lg font-black text-slate-900">Мои поездки и бронирования</h2>
+              <p className="text-xs text-slate-500">Управляйте вашими поездками и оценивайте уровень комфорта</p>
+            </div>
+            <Link
+              href="/my-bookings"
+              className="inline-flex items-center space-x-1 text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded-xl transition-colors"
+            >
+              <span>Все поездки ({bookings.length})</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
           </div>
 
           {loadingBookings ? (
@@ -216,7 +225,7 @@ export default function ProfilePage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {bookings.map((b) => (
+              {bookings.slice(0, 3).map((b) => (
                 <div
                   key={b.id}
                   className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
@@ -234,12 +243,26 @@ export default function ProfilePage() {
                     <span className="text-sm font-black text-slate-900">
                       {Number(b.total_price).toLocaleString('ru-RU')} ₽
                     </span>
-                    <span className="text-[11px] font-bold px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-lg">
-                      Подтверждено
-                    </span>
+                    <Link
+                      href="/my-bookings"
+                      className="text-xs font-bold px-3 py-1.5 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-xl transition-all shadow-xs"
+                    >
+                      Оценить отдых ☀️
+                    </Link>
                   </div>
                 </div>
               ))}
+
+              {bookings.length > 3 && (
+                <div className="text-center pt-2">
+                  <Link
+                    href="/my-bookings"
+                    className="text-xs font-bold text-blue-600 hover:underline"
+                  >
+                    Посмотреть все {bookings.length} поездок →
+                  </Link>
+                </div>
+              )}
             </div>
           )}
         </div>

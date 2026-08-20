@@ -21,10 +21,22 @@ export const Header: React.FC = () => {
           </span>
         </Link>
 
-        {/* Правая часть: Вход / Кабинет / Сдать жилье */}
+        {/* Правая часть: Вход / Кабинет / Мои поездки / Сдать жилье */}
         <div className="flex items-center space-x-2 sm:space-x-3">
           {user ? (
             <div className="flex items-center space-x-2">
+              {/* Прямая ссылка на Мои поездки для туристов */}
+              {user.role !== 'landlord' && (
+                <Link
+                  href="/my-bookings"
+                  className="inline-flex items-center space-x-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/80 text-xs font-bold px-3 py-2 rounded-xl transition-all shadow-xs"
+                >
+                  <span>Мои поездки</span>
+                  <span className="text-sm">🏖️</span>
+                </Link>
+              )}
+
+              {/* Профиль / Личный кабинет */}
               <Link
                 href={user.role === 'landlord' ? '/dashboard' : '/profile'}
                 className="inline-flex items-center space-x-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold px-3 py-2 rounded-xl transition-all"
@@ -34,7 +46,7 @@ export const Header: React.FC = () => {
                 ) : (
                   <User className="w-4 h-4 text-blue-600 flex-shrink-0" />
                 )}
-                <span className="max-w-[100px] sm:max-w-[150px] truncate">{user.name}</span>
+                <span className="max-w-[90px] sm:max-w-[140px] truncate">{user.name || 'Профиль'}</span>
                 <span className="text-[10px] bg-blue-200/70 text-blue-800 px-1.5 py-0.5 rounded-md ml-1 hidden sm:inline-block">
                   {user.role === 'landlord' ? 'Владелец' : 'Турист'}
                 </span>
