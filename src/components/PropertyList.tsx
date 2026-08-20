@@ -10,7 +10,7 @@ import {
   Search, SlidersHorizontal, Calendar, Users, Heart,
   RotateCcw, X, Waves, Check, Home, Building2
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 interface BookedItem {
   property_id: string;
@@ -24,20 +24,61 @@ const FILTER_BONUSES = ['Wi-Fi', 'Кондиционер', 'Мангал', 'Ба
 
 export const PropertyList: React.FC<{ properties: Property[] }> = ({ properties }) => {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const { favorites } = useFavorites();
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
 
-  // Фильтры
-  const [typeFilter, setTypeFilter] = useState<'all' | 'house' | 'room'>('all');
-  const [onlyFavorites, setOnlyFavorites] = useState(false);
-  const [minPrice, setMinPrice] = useState<string>('');
-  const [maxPrice, setMaxPrice] = useState<string>('');
-  const [guestsCount, setGuestsCount] = useState<number>(1);
-  const [checkInDate, setCheckInDate] = useState<string>('');
-  const [checkOutDate, setCheckOutDate] = useState<string>('');
-  const [maxDistance, setMaxDistance] = useState<number>(1000);
-  const [selectedBonuses, setSelectedBonuses] = useState<string[]>([]);
+  // Инициализация фильтров из URL параметров
+  const [typeFilter, setTypeFilter] = useState<'all' | 'house' | 'room'>(
+    () => (searchParams.get('type') as any) || 'all'
+  );
+  const [onlyFavorites, setOnlyFavorites] = useState(
+    () => searchParams.get('fav') === '1'
+  );
+  const [minPrice, setMinPrice] = useState<string>(
+    () => searchParams.get('min_price') || ''
+  );
+  const [maxPrice, setMaxPrice] = useState<string>(
+    () => searchParams.get('max_price') || ''
+  );
+  const [guestsCount, setGuestsCount] = useState<number>(
+    () => Number(searchParams.get('guests')) || 1
+  );
+  const [checkInDate, setCheckInDate] = useState<string>(
+    () => searchParams.get('check_in') || ''
+  );
+  const [checkOutDate, setCheckOutDate] = useState<string>(
+    () => searchParams.get('check_out') || ''
+  );
+  const [maxDistance, setMaxDistance] = useState<number>(
+    () => Number(searchParams.get('distance')) || 1000
+  );
+  const [selectedBonuses, setSelectedBonuses] = useState<string[]>(
+    () => (searchParams.get('bonuses') ? searchParams.get('bonuses')!.split(',').filter(Boolean) : [])
+  );
+
+  // Автоматическая синхронизация фильтров в URL (без перезагрузки и скролла)
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (typeFilter !== 'all') params.set('type', typeFilter);
+    if (onlyFavorites) params.set('fav', '1');
+    if (minPrice) params.set('min_price', minPrice);
+    if (maxPrice) params.set('max_price', maxPrice);
+    if (guestsCount > 1) params.set('guests', String(guestsCount));
+    if (checkInDate) params.set('check_in', checkInDate);
+    if (checkOutDate) params.set('check_out', checkOutDate);
+    if (maxDistance < 1000) params.set('distance', String(maxDistance));
+    if (selectedBonuses.length > 0) params.set('bonuses', selectedBonuses.join(','));
+
+    const queryString = params.toString();
+    const targetUrl = queryString ? `/?${queryString}` : '/';
+    router.replace(targetUrl, { scroll: false });
+  }, [
+    typeFilter, onlyFavorites, minPrice, maxPrice,
+    guestsCount, checkInDate, checkOutDate, maxDistance,
+    selectedBonuses, router
+  ]);
 
   // Модалка расширенных фильтров
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);

@@ -155,19 +155,22 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onBook }) 
 
           {/* Рейтинг «Уровень Рахата» ☀️ */}
           <div className="flex items-center space-x-1.5 mb-3">
-            <div className="inline-flex items-center space-x-1 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-lg text-amber-900 text-xs font-bold">
-              <span>☀️</span>
-              <span>{property.rating ? Number(property.rating).toFixed(1) : '5.0'}</span>
-              <span className="text-[10px] text-amber-700 font-semibold">Рахата</span>
-            </div>
             {property.reviews_count && property.reviews_count > 0 ? (
-              <span className="text-[11px] text-slate-400 font-medium">
-                ({property.reviews_count} {property.reviews_count === 1 ? 'отзыв' : property.reviews_count < 5 ? 'отзыва' : 'отзывов'})
-              </span>
+              <>
+                <div className="inline-flex items-center space-x-1 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-lg text-amber-900 text-xs font-bold">
+                  <span>☀️</span>
+                  <span>{Number(property.rating).toFixed(1)}</span>
+                  <span className="text-[10px] text-amber-700 font-semibold">Рахата</span>
+                </div>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  ({property.reviews_count} {property.reviews_count === 1 ? 'отзыв' : property.reviews_count < 5 ? 'отзыва' : 'отзывов'})
+                </span>
+              </>
             ) : (
-              <span className="text-[11px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded-md">
-                Новинка ☀️
-              </span>
+              <div className="inline-flex items-center space-x-1 bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded-lg text-blue-800 text-xs font-bold">
+                <span>☀️</span>
+                <span>Ожидает первых гостей</span>
+              </div>
             )}
           </div>
 

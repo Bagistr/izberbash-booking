@@ -8,9 +8,11 @@ import {
   Waves, DollarSign, TrendingUp, Users, Calendar as CalendarIcon,
   Plus, LogOut, Edit3, Eye, EyeOff, ChevronLeft, ChevronRight,
   X, Lock, Unlock, Phone, User, PlusCircle, CreditCard, ArrowUpRight,
-  Star, MessageSquare, CornerDownRight, Sparkles, Send, Loader2
+  Star, MessageSquare, CornerDownRight, Sparkles, Send, Loader2,
+  Image as ImageIcon, Trash2, Check
 } from 'lucide-react';
 import { Property } from '@/types/property';
+import { ImageCropperModal } from '@/components/ImageCropperModal';
 
 interface BookingItem {
   id: string;
@@ -85,6 +87,11 @@ export default function DashboardPage() {
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [editFormData, setEditFormData] = useState<any>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+
+  // Управление фото при редактировании
+  const [editCroppingImage, setEditCroppingImage] = useState<{ url: string; width: number; height: number } | null>(null);
+  const [editPendingFiles, setEditPendingFiles] = useState<File[]>([]);
+  const [editUploading, setEditUploading] = useState(false);
 
   // Отзывы гостей и ответы владельца
   const [reviews, setReviews] = useState<any[]>([]);
@@ -276,8 +283,103 @@ export default function DashboardPage() {
     setEditingProperty(p);
     setEditFormData({
       ...p,
+      photos: p.photos && Array.isArray(p.photos) ? [...p.photos] : [],
       amenities: p.amenities || [],
     });
+  };
+
+  const handleRemoveEditPhoto = (indexToRemove: number) => {
+    if (!editFormData) return;
+    const currentPhotos = editFormData.photos || [];
+    setEditFormData({
+      ...editFormData,
+      photos: currentPhotos.filter((_: any, idx: number) => idx !== indexToRemove),
+    });
+  };
+
+  const handleMakeMainEditPhoto = (indexToMain: number) => {
+    if (!editFormData) return;
+    const currentPhotos = [...(editFormData.photos || [])];
+    const target = currentPhotos[indexToMain];
+    const remaining = currentPhotos.filter((_: any, idx: number) => idx !== indexToMain);
+    setEditFormData({
+      ...editFormData,
+      photos: [target, ...remaining],
+    });
+  };
+
+  const handleEditImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const fileList = Array.from(files);
+    const firstFile = fileList[0];
+    const remaining = fileList.slice(1);
+
+    setEditPendingFiles(remaining);
+    openEditCropForFile(firstFile);
+    e.target.value = '';
+  };
+
+  const openEditCropForFile = (file: File) => {
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      setEditCroppingImage({
+        url: objectUrl,
+        width: img.width,
+        height: img.height,
+      });
+    };
+    img.src = objectUrl;
+  };
+
+  const handleEditCropComplete = async (croppedWebpFile: File) => {
+    setEditCroppingImage(null);
+    setEditUploading(true);
+
+    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+    const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+
+    if (cloudName && uploadPreset) {
+      try {
+        const data = new FormData();
+        data.append('file', croppedWebpFile);
+        data.append('upload_preset', uploadPreset);
+
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+          method: 'POST',
+          body: data,
+        });
+
+        if (res.ok) {
+          const fileData = await res.json();
+          setEditFormData((prev: any) => ({
+            ...prev,
+            photos: [...(prev?.photos || []), fileData.secure_url],
+          }));
+        }
+      } catch (err) {
+        console.error('Ошибка загрузки фото:', err);
+      }
+    } else {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setEditFormData((prev: any) => ({
+          ...prev,
+          photos: [...(prev?.photos || []), reader.result as string],
+        }));
+      };
+      reader.readAsDataURL(croppedWebpFile);
+    }
+
+    setEditUploading(false);
+
+    if (editPendingFiles.length > 0) {
+      const nextFile = editPendingFiles[0];
+      setEditPendingFiles((prev) => prev.slice(1));
+      openEditCropForFile(nextFile);
+    }
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
@@ -1116,6 +1218,85 @@ export default function DashboardPage() {
                 />
               </div>
 
+              {/* УПРАВЛЕНИЕ ФОТОГРАФИЯМИ ОБЪЕКТА */}
+              <div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase">
+                      Фотографии объекта ({editFormData.photos?.length || 0})
+                    </label>
+                    <p className="text-[11px] text-slate-400">
+                      Первое фото — обложка объявления. Нажмите «Сделать главным» для смены обложки.
+                    </p>
+                  </div>
+
+                  <label className="inline-flex items-center space-x-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold px-3 py-2 rounded-xl transition-all cursor-pointer shadow-xs self-start sm:self-auto">
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{editUploading ? 'Загрузка...' : '+ Добавить фото'}</span>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={handleEditImageSelect}
+                      disabled={editUploading}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                {/* Сетка миниатюр фото */}
+                {(!editFormData.photos || editFormData.photos.length === 0) ? (
+                  <div className="p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center space-y-2">
+                    <ImageIcon className="w-8 h-8 text-slate-300 mx-auto" />
+                    <p className="text-xs text-slate-500 font-medium">Нет загруженных фотографий</p>
+                    <label className="inline-block bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all cursor-pointer">
+                      Загрузить первое фото
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/*"
+                        onChange={handleEditImageSelect}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-200">
+                    {editFormData.photos.map((photoUrl: string, idx: number) => (
+                      <div key={idx} className="relative aspect-video rounded-xl overflow-hidden border border-slate-200 bg-slate-200 group shadow-xs">
+                        <img src={photoUrl} alt={`Фото ${idx + 1}`} className="w-full h-full object-cover" />
+
+                        {/* Бейдж главного фото */}
+                        {idx === 0 ? (
+                          <span className="absolute top-1.5 left-1.5 bg-emerald-600/90 backdrop-blur-sm text-white text-[9px] font-black px-2 py-0.5 rounded-md shadow-xs flex items-center gap-0.5 z-10">
+                            <Check className="w-2.5 h-2.5" /> Главное
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleMakeMainEditPhoto(idx)}
+                            className="absolute top-1.5 left-1.5 bg-black/70 hover:bg-blue-600 text-white text-[9px] font-bold px-2 py-0.5 rounded-md backdrop-blur-sm transition-all opacity-0 group-hover:opacity-100 cursor-pointer z-10"
+                            title="Сделать обложкой"
+                          >
+                            Сделать главным
+                          </button>
+                        )}
+
+                        {/* Кнопка удаления фото */}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveEditPhoto(idx)}
+                          className="absolute top-1.5 right-1.5 bg-rose-600 hover:bg-rose-700 text-white p-1 rounded-md shadow-md transition-all opacity-0 group-hover:opacity-100 cursor-pointer z-10"
+                          title="Удалить фото"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Удобства и бонусы</label>
                 <div className="flex flex-wrap gap-1.5">
@@ -1148,6 +1329,20 @@ export default function DashboardPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* МОДАЛКА КАДРИРОВАНИЯ ФОТО ПРИ РЕДАКТИРОВАНИИ */}
+      {editCroppingImage && (
+        <ImageCropperModal
+          imageSrc={editCroppingImage.url}
+          originalWidth={editCroppingImage.width}
+          originalHeight={editCroppingImage.height}
+          onCropComplete={handleEditCropComplete}
+          onCancel={() => {
+            setEditCroppingImage(null);
+            setEditPendingFiles([]);
+          }}
+        />
       )}
     </main>
   );

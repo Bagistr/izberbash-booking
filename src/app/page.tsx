@@ -1,9 +1,10 @@
+import React, { Suspense } from 'react';
 import Link from 'next/link';
 import { sql } from '@/lib/db';
 import { Property } from '@/types/property';
 import { PropertyList } from '@/components/PropertyList';
 import { Header } from '@/components/Header';
-import { ShieldCheck, MapPin, Waves, Sparkles } from 'lucide-react';
+import { ShieldCheck, MapPin, Waves, Sparkles, Loader2 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -92,7 +93,14 @@ export default async function HomePage() {
 
       {/* Каталог и интерактивные фильтры */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <PropertyList properties={properties} />
+        <Suspense fallback={
+          <div className="text-center py-20">
+            <Loader2 className="w-8 h-8 text-blue-600 animate-spin mx-auto" />
+            <p className="text-xs text-slate-400 mt-2">Загрузка каталога жилья...</p>
+          </div>
+        }>
+          <PropertyList properties={properties} />
+        </Suspense>
       </section>
 
     {/* ПОДВАЛ САЙТА (FOOTER) */}

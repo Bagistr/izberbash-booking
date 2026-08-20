@@ -30,8 +30,40 @@ export default function PropertyDetailPage() {
   const [avgRating, setAvgRating] = useState<number>(5.0);
   const [reviewsTotal, setReviewsTotal] = useState<number>(0);
 
-  // Полноэкранная галерея (Lightbox)
+  // Полноэкранная галерея (Lightbox) и карусель
+  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+
+  const prevPhoto = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (lightboxIndex !== null) {
+      setLightboxIndex(lightboxIndex === 0 ? photos.length - 1 : lightboxIndex - 1);
+    } else {
+      setCurrentPhotoIndex((prev) => (prev === 0 ? photos.length - 1 : prev - 1));
+    }
+  };
+
+  const nextPhoto = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (lightboxIndex !== null) {
+      setLightboxIndex(lightboxIndex === photos.length - 1 ? 0 : lightboxIndex + 1);
+    } else {
+      setCurrentPhotoIndex((prev) => (prev === photos.length - 1 ? 0 : prev + 1));
+    }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartX(e.touches[0].clientX);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX === null) return;
+    const diff = touchStartX - e.changedTouches[0].clientX;
+    if (diff > 40) nextPhoto();
+    else if (diff < -40) prevPhoto();
+    setTouchStartX(null);
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -106,22 +138,8 @@ export default function PropertyDetailPage() {
     }
   };
 
-  const prevPhoto = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (lightboxIndex !== null) {
-      setLightboxIndex(lightboxIndex === 0 ? photos.length - 1 : lightboxIndex - 1);
-    }
-  };
-
-  const nextPhoto = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (lightboxIndex !== null) {
-      setLightboxIndex(lightboxIndex === photos.length - 1 ? 0 : lightboxIndex + 1);
-    }
-  };
-
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900 pb-16">
+    <main className="min-h-screen bg-[#F8FAFC] text-slate-900 pb-16">
       {/* Шапка */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -174,13 +192,20 @@ export default function PropertyDetailPage() {
           </div>
 
           <div className="flex flex-wrap items-center text-xs sm:text-sm text-slate-600 font-medium gap-y-1">
-            <div className="flex items-center text-slate-900 font-bold mr-2">
-              <span className="text-amber-500 mr-1 text-sm">☀️</span>
-              <span>{avgRating ? avgRating.toFixed(1) : '5.0'} Рахата</span>
-              <span className="text-slate-500 font-normal ml-1">
-                {reviewsTotal > 0 ? `(${reviewsTotal} ${reviewsTotal === 1 ? 'отзыв' : reviewsTotal < 5 ? 'отзыва' : 'отзывов'})` : '• Новинка'}
-              </span>
-            </div>
+            {reviewsTotal > 0 ? (
+              <div className="flex items-center text-slate-900 font-bold mr-2">
+                <span className="text-amber-500 mr-1 text-sm">☀️</span>
+                <span>{avgRating.toFixed(1)} Рахата</span>
+                <span className="text-slate-500 font-normal ml-1">
+                  ({reviewsTotal} {reviewsTotal === 1 ? 'отзыв' : reviewsTotal < 5 ? 'отзыва' : 'отзывов'})
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center text-blue-800 bg-blue-50 border border-blue-200/80 px-2.5 py-0.5 rounded-lg font-bold text-xs mr-2">
+                <span className="mr-1">☀️</span>
+                <span>Ожидает первых гостей</span>
+              </div>
+            )}
             <span className="mx-2 text-slate-300 hidden sm:inline">•</span>
             <div className="flex items-center">
               <MapPin className="w-3.5 h-3.5 mr-1 text-slate-400" />
@@ -191,70 +216,87 @@ export default function PropertyDetailPage() {
           </div>
         </div>
 
-        {/* МОНОЛИТНАЯ СТАНДАРТИЗИРОВАННАЯ ГАЛЕРЕЯ (16:9) */}
-        <div className="mb-10 rounded-3xl overflow-hidden shadow-sm border border-slate-200/80 bg-slate-100">
-          {photos.length === 1 ? (
-            <div
-              onClick={() => setLightboxIndex(0)}
-              className="relative aspect-video w-full cursor-pointer overflow-hidden group"
-            >
-              <img
-                src={photos[0]}
-                alt={property.title}
-                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-              />
+        {/* 16:9 СТАНДАРТИЗИРОВАННАЯ КАРУСЕЛЬ С ЛЕНТОЙ МИНИАТЮР */}
+        <div className="mb-10 space-y-3">
+          <div
+            className="relative aspect-video w-full rounded-3xl overflow-hidden shadow-lg border border-slate-200/80 bg-slate-950 select-none group"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+          >
+            <img
+              src={photos[currentPhotoIndex]}
+              alt={`${property.title} - фото ${currentPhotoIndex + 1}`}
+              onClick={() => setLightboxIndex(currentPhotoIndex)}
+              className="w-full h-full object-cover cursor-pointer transition-transform duration-500 group-hover:scale-102"
+            />
+
+            {/* Бейдж счетчика фото */}
+            <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-md text-white text-xs font-bold px-3.5 py-1.5 rounded-full border border-white/10 z-10">
+              {currentPhotoIndex + 1} / {photos.length}
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-2 aspect-video w-full">
-              {/* Главное фото слева (50% ширины) */}
-              <div
-                onClick={() => setLightboxIndex(0)}
-                className="relative h-full md:col-span-6 cursor-pointer overflow-hidden group"
-              >
-                <img
-                  src={photos[0]}
-                  alt={`${property.title} - Главное`}
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                />
-              </div>
 
-              {/* Правая колонка: ровно 2 фото */}
-              <div className="hidden md:grid md:col-span-6 grid-rows-2 gap-2 h-full">
-                <div
-                  onClick={() => setLightboxIndex(1 % photos.length)}
-                  className="relative h-full cursor-pointer overflow-hidden group"
+            {/* Стрелки перелистывания */}
+            {photos.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={prevPhoto}
+                  className="absolute left-3 sm:left-5 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-slate-800 p-2.5 sm:p-3 rounded-full shadow-lg transition-all hover:scale-110 active:scale-95 z-10 cursor-pointer"
                 >
-                  <img
-                    src={photos[1] || photos[0]}
-                    alt={`${property.title} 2`}
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                  />
-                </div>
-
-                <div
-                  onClick={() => setLightboxIndex(2 % photos.length)}
-                  className="relative h-full cursor-pointer overflow-hidden group"
+                  <ChevronLeft className="w-5 h-5 text-slate-800" />
+                </button>
+                <button
+                  type="button"
+                  onClick={nextPhoto}
+                  className="absolute right-3 sm:right-5 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-slate-800 p-2.5 sm:p-3 rounded-full shadow-lg transition-all hover:scale-110 active:scale-95 z-10 cursor-pointer"
                 >
-                  <img
-                    src={photos[2] || photos[1] || photos[0]}
-                    alt={`${property.title} 3`}
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-black/10 group-hover:bg-black/20 transition-colors" />
+                  <ChevronRight className="w-5 h-5 text-slate-800" />
+                </button>
 
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setLightboxIndex(0);
-                    }}
-                    className="absolute bottom-3 right-3 bg-white/95 hover:bg-white text-slate-900 text-xs font-bold px-3.5 py-2 rounded-xl shadow-lg border border-slate-200/80 flex items-center space-x-1.5 transition-all hover:scale-105 active:scale-95 cursor-pointer z-10"
-                  >
-                    <Grid className="w-3.5 h-3.5 text-slate-700" />
-                    <span>Все {photos.length} фото</span>
-                  </button>
+                {/* Точки-индикаторы */}
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex space-x-1.5 z-10 bg-black/40 backdrop-blur-sm px-3 py-1.5 rounded-full">
+                  {photos.map((_, idx) => (
+                    <button
+                      type="button"
+                      key={idx}
+                      onClick={() => setCurrentPhotoIndex(idx)}
+                      className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                        idx === currentPhotoIndex ? 'bg-white w-4' : 'bg-white/50 w-1.5 hover:bg-white/80'
+                      }`}
+                    />
+                  ))}
                 </div>
-              </div>
+              </>
+            )}
+
+            {/* Кнопка "Смотреть все N фото" */}
+            <button
+              type="button"
+              onClick={() => setLightboxIndex(currentPhotoIndex)}
+              className="absolute bottom-4 right-4 bg-white/95 hover:bg-white text-slate-900 text-xs font-bold px-4 py-2.5 rounded-2xl shadow-xl border border-slate-200/80 flex items-center space-x-2 transition-all hover:scale-105 active:scale-95 cursor-pointer z-10"
+            >
+              <Grid className="w-4 h-4 text-blue-600" />
+              <span>Все {photos.length} фото</span>
+            </button>
+          </div>
+
+          {/* Миниатюры (лента предпросмотра) */}
+          {photos.length > 1 && (
+            <div className="flex space-x-2.5 overflow-x-auto pb-2 scrollbar-none">
+              {photos.map((p, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setCurrentPhotoIndex(idx)}
+                  className={`relative w-20 h-14 sm:w-24 sm:h-16 rounded-xl overflow-hidden border-2 flex-shrink-0 transition-all cursor-pointer ${
+                    idx === currentPhotoIndex
+                      ? 'border-blue-600 ring-2 ring-blue-500/30 scale-102'
+                      : 'border-transparent opacity-70 hover:opacity-100'
+                  }`}
+                >
+                  <img src={p} alt="" className="w-full h-full object-cover" />
+                </button>
+              ))}
             </div>
           )}
         </div>
@@ -301,23 +343,39 @@ export default function PropertyDetailPage() {
                   </p>
                 </div>
 
-                <div className="inline-flex items-center gap-2 bg-amber-50 border border-amber-200 px-3.5 py-1.5 rounded-2xl">
-                  <span className="text-xl font-black text-amber-900">{avgRating ? avgRating.toFixed(1) : '5.0'}</span>
-                  <div className="text-[10px] leading-tight text-amber-800 font-bold">
-                    <p>из 5.0 Рахата</p>
-                    <p className="text-slate-400 font-normal">{reviewsTotal} {reviewsTotal === 1 ? 'отзыв' : 'отзывов'}</p>
+                {reviewsTotal > 0 ? (
+                  <div className="inline-flex items-center gap-2 bg-amber-50 border border-amber-200 px-3.5 py-1.5 rounded-2xl">
+                    <span className="text-xl font-black text-amber-900">{avgRating.toFixed(1)}</span>
+                    <div className="text-[10px] leading-tight text-amber-800 font-bold">
+                      <p>из 5.0 Рахата</p>
+                      <p className="text-slate-400 font-normal">{reviewsTotal} {reviewsTotal === 1 ? 'отзыв' : reviewsTotal < 5 ? 'отзыва' : 'отзывов'}</p>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="inline-flex items-center gap-1.5 bg-blue-50 border border-blue-200 px-3.5 py-2 rounded-2xl text-blue-800 text-xs font-bold">
+                    <span>☀️</span>
+                    <span>Ожидает первых гостей</span>
+                  </div>
+                )}
               </div>
 
               {/* Список отзывов */}
               {reviews.length === 0 ? (
-                <div className="text-center py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200 p-6 space-y-2">
+                <div className="text-center py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200 p-6 space-y-3">
                   <span className="text-3xl">🏖️</span>
-                  <p className="text-sm font-bold text-slate-700">Пока нет отзывов для этого объекта</p>
+                  <p className="text-sm font-bold text-slate-800">Этот объект пока не имеет отзывов</p>
                   <p className="text-xs text-slate-500 max-w-md mx-auto">
-                    Вы можете стать первым! После завершения поездки оцените уровень комфорта в разделе «Мои поездки».
+                    Будьте первыми, кто проведёт здесь незабываемый отдых на Каспийском побережье! После завершения поездки вы сможете выставить оценку «Уровень Рахата» в разделе «Мои поездки».
                   </p>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setIsBookingOpen(true)}
+                      className="inline-flex items-center space-x-1.5 bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-black px-4 py-2.5 rounded-xl shadow-xs transition-all cursor-pointer hover:scale-105 active:scale-95"
+                    >
+                      <span>Станьте первым, кто оценит ☀️</span>
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-4">

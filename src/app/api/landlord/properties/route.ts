@@ -96,6 +96,7 @@ export async function PUT(request: Request) {
       address,
       description,
       amenities,
+      photos,
       is_active,
     } = body;
 
@@ -118,20 +119,44 @@ export async function PUT(request: Request) {
         ? amenities.split(',').map((a: string) => a.trim()).filter(Boolean)
         : [];
 
-      await sql`
-        UPDATE properties
-        SET 
-          title = ${title},
-          property_type = ${property_type},
-          price_per_night = ${Number(price_per_night)},
-          max_guests = ${Number(max_guests)},
-          distance_to_sea = ${Number(distance_to_sea)},
-          address = ${address},
-          description = ${description || ''},
-          amenities = ${amenitiesArray},
-          is_active = ${is_active !== undefined ? Boolean(is_active) : true}
-        WHERE id = ${id}::uuid
-      `;
+      const photosArray = Array.isArray(photos)
+        ? photos
+        : typeof photos === 'string'
+        ? photos.split('\n').map((p: string) => p.trim()).filter(Boolean)
+        : null;
+
+      if (photosArray !== null) {
+        await sql`
+          UPDATE properties
+          SET 
+            title = ${title},
+            property_type = ${property_type},
+            price_per_night = ${Number(price_per_night)},
+            max_guests = ${Number(max_guests)},
+            distance_to_sea = ${Number(distance_to_sea)},
+            address = ${address},
+            description = ${description || ''},
+            amenities = ${amenitiesArray},
+            photos = ${photosArray},
+            is_active = ${is_active !== undefined ? Boolean(is_active) : true}
+          WHERE id = ${id}::uuid
+        `;
+      } else {
+        await sql`
+          UPDATE properties
+          SET 
+            title = ${title},
+            property_type = ${property_type},
+            price_per_night = ${Number(price_per_night)},
+            max_guests = ${Number(max_guests)},
+            distance_to_sea = ${Number(distance_to_sea)},
+            address = ${address},
+            description = ${description || ''},
+            amenities = ${amenitiesArray},
+            is_active = ${is_active !== undefined ? Boolean(is_active) : true}
+          WHERE id = ${id}::uuid
+        `;
+      }
     }
 
     // Очищаем кэш главной страницы
