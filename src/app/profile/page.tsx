@@ -21,11 +21,16 @@ interface BookingItem {
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { user, login, logout } = useAuth();
+  const { user, login, logout, switchRole } = useAuth();
 
   const [switching, setSwitching] = useState(false);
   const [bookings, setBookings] = useState<BookingItem[]>([]);
   const [loadingBookings, setLoadingBookings] = useState(true);
+
+  // Привязка телефона к Telegram-аккаунту
+  const [linkPhoneInput, setLinkPhoneInput] = useState('');
+  const [linkingPhone, setLinkingPhone] = useState(false);
+  const [linkMsg, setLinkMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Если не авторизован — отправляем на страницу входа
   useEffect(() => {
@@ -55,25 +60,12 @@ export default function ProfilePage() {
     loadBookings();
   }, [user]);
 
-  // Переключение роли на Владельца
-  const handleBecomeLandlord = async () => {
-    if (!user?.phone) return;
+  // Переключение роли
+  const handleToggleRole = async (targetRole: 'guest' | 'landlord') => {
     setSwitching(true);
-
     try {
-      const res = await fetch('/api/auth/switch-role', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: user.phone, newRole: 'landlord' }),
-      });
-
-      if (res.ok) {
-        // Обновляем роль в локальной сессии
-        login({
-          ...user,
-          role: 'landlord',
-        });
-        // Мгновенно перенаправляем в панель управления жильем
+      await switchRole(targetRole);
+      if (targetRole === 'landlord') {
         router.push('/dashboard');
       }
     } catch (err) {
@@ -83,9 +75,38 @@ export default function ProfilePage() {
     }
   };
 
+  // Привязка телефона
+  const handleLinkPhone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user?.id || !linkPhoneInput) return;
+    setLinkingPhone(true);
+    setLinkMsg(null);
+
+    try {
+      const res = await fetch('/api/auth/link-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, phone: linkPhoneInput }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Ошибка привязки');
+
+      login(data.user);
+      setLinkMsg({ type: 'success', text: 'Номер телефона успешно объединен с аккаунтом!' });
+      setLinkPhoneInput('');
+    } catch (err: any) {
+      setLinkMsg({ type: 'error', text: err.message || 'Ошибка объединения' });
+    } finally {
+      setLinkingPhone(false);
+    }
+  };
+
   if (!user) {
     return null;
   }
+
+  const isTgOnly = user.phone && user.phone.startsWith('tg_');
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 pb-16">
@@ -117,7 +138,43 @@ export default function ProfilePage() {
       </header>
 
       <div className="max-w-4xl mx-auto px-4 pt-8 space-y-6">
-        {/* КАРТОЧКА: ПЕРЕКЛЮЧЕНИЕ НА ВЛАДЕЛЬЦА */}
+
+        {/* БАННЕР ПРИВЯЗКИ ТЕЛЕФОНА (если вход был через Telegram) */}
+        {isTgOnly && (
+          <div className="bg-amber-50 border border-amber-200 rounded-3xl p-6 shadow-sm space-y-3">
+            <div className="flex items-center space-x-2 text-amber-900">
+              <Phone className="w-5 h-5 text-amber-600" />
+              <h3 className="font-bold text-sm">Синхронизация с номером телефона</h3>
+            </div>
+            <p className="text-xs text-amber-800">
+              Вы вошли через Telegram. Привяжите ваш номер телефона, чтобы объединить все бронирования и объекты в один аккаунт.
+            </p>
+            {linkMsg && (
+              <div className={`p-3 rounded-xl text-xs font-bold ${linkMsg.type === 'success' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+                {linkMsg.text}
+              </div>
+            )}
+            <form onSubmit={handleLinkPhone} className="flex flex-col sm:flex-row gap-2 max-w-md">
+              <input
+                type="tel"
+                required
+                placeholder="+7 (999) 000-00-00"
+                value={linkPhoneInput}
+                onChange={(e) => setLinkPhoneInput(e.target.value)}
+                className="text-xs bg-white border border-amber-300 rounded-xl px-3.5 py-2.5 font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
+              <button
+                type="submit"
+                disabled={linkingPhone}
+                className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer whitespace-nowrap"
+              >
+                {linkingPhone ? 'Объединение...' : 'Объединить аккаунт'}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* КАРТОЧКА: ПЕРЕКЛЮЧЕНИЕ РОЛЕЙ */}
         {user.role !== 'landlord' ? (
           <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-3xl p-6 sm:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg shadow-blue-600/10">
             <div className="space-y-1.5">
@@ -125,40 +182,53 @@ export default function ProfilePage() {
                 <Sparkles className="w-3.5 h-3.5 text-amber-300" />
                 <span>Сдавайте жилье на Райском Пляже</span>
               </div>
-              <h3 className="text-xl font-black tracking-tight">Хотите сдавать свой дом или номер?</h3>
+              <h3 className="text-xl font-black tracking-tight">
+                {user.is_landlord ? 'Режим туриста активен' : 'Хотите сдавать свой дом или номер?'}
+              </h3>
               <p className="text-xs sm:text-sm text-blue-100 max-w-lg">
-                Переключите аккаунт в режим владельца: ведите шахматку занятости, принимайте прямые заявки и зарабатывайте с минимальной комиссией 7%.
+                {user.is_landlord
+                  ? 'Вы можете в любой момент вернуться в панель управления объектами и шахматкой занятости.'
+                  : 'Переключите аккаунт в режим владельца: ведите шахматку занятости, принимайте заявки и зарабатывайте.'}
               </p>
             </div>
 
             <button
               type="button"
-              onClick={handleBecomeLandlord}
+              onClick={() => handleToggleRole('landlord')}
               disabled={switching}
               className="bg-white hover:bg-blue-50 text-blue-700 font-bold text-xs px-5 py-3.5 rounded-2xl flex items-center space-x-2 transition-all shadow-md flex-shrink-0 cursor-pointer"
             >
               <Building2 className="w-4 h-4" />
-              <span>{switching ? 'Переключение...' : 'Стать владельцем'}</span>
+              <span>{switching ? 'Переключение...' : user.is_landlord ? 'В кабинет владельца 🔑' : 'Стать владельцем'}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
         ) : (
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 flex items-center justify-between shadow-sm">
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
             <div className="flex items-center space-x-3">
               <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl">
                 <Building2 className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-900">Вы являетесь владельцем жилья</h3>
-                <p className="text-xs text-slate-500">Управляйте шахматкой, ценами и объектами в личном кабинете</p>
+                <h3 className="text-base font-bold text-slate-900">Вы в режиме Владельца</h3>
+                <p className="text-xs text-slate-500">Управляйте шахматкой, ценами и бронированиями</p>
               </div>
             </div>
-            <Link
-              href="/dashboard"
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all"
-            >
-              В кабинет владельца
-            </Link>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleToggleRole('guest')}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs px-4 py-2.5 rounded-xl transition-all cursor-pointer"
+              >
+                Режим гостя 🏖️
+              </button>
+              <Link
+                href="/dashboard"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-sm"
+              >
+                В кабинет 🔑
+              </Link>
+            </div>
           </div>
         )}
 

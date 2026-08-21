@@ -6,7 +6,7 @@ import { Waves, User, LayoutDashboard, LogOut } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 export const Header: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, switchRole } = useAuth();
 
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
@@ -25,15 +25,28 @@ export const Header: React.FC = () => {
         <div className="flex items-center space-x-2 sm:space-x-3">
           {user ? (
             <div className="flex items-center space-x-2">
-              {/* Прямая ссылка на Мои поездки для туристов */}
-              {user.role !== 'landlord' && (
-                <Link
-                  href="/my-bookings"
-                  className="inline-flex items-center space-x-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/80 text-xs font-bold px-3 py-2 rounded-xl transition-all shadow-xs"
+              {/* Прямая ссылка на Мои поездки */}
+              <Link
+                href="/my-bookings"
+                className="inline-flex items-center space-x-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/80 text-xs font-bold px-2.5 sm:px-3 py-2 rounded-xl transition-all shadow-xs"
+              >
+                <span>Мои поездки</span>
+                <span className="text-sm">🏖️</span>
+              </Link>
+
+              {/* Быстрое переключение роли для арендодателей */}
+              {user.is_landlord && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextRole = user.role === 'landlord' ? 'guest' : 'landlord';
+                    switchRole(nextRole);
+                  }}
+                  className="inline-flex items-center space-x-1 text-[11px] font-bold px-2.5 py-2 rounded-xl border transition-all cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-200"
+                  title="Переключить режим"
                 >
-                  <span>Мои поездки</span>
-                  <span className="text-sm">🏖️</span>
-                </Link>
+                  <span>{user.role === 'landlord' ? '🏖️ Режим гостя' : '🔑 Кабинет владельца'}</span>
+                </button>
               )}
 
               {/* Профиль / Личный кабинет */}
@@ -46,16 +59,13 @@ export const Header: React.FC = () => {
                 ) : (
                   <User className="w-4 h-4 text-blue-600 flex-shrink-0" />
                 )}
-                <span className="max-w-[90px] sm:max-w-[140px] truncate">{user.name || 'Профиль'}</span>
-                <span className="text-[10px] bg-blue-200/70 text-blue-800 px-1.5 py-0.5 rounded-md ml-1 hidden sm:inline-block">
-                  {user.role === 'landlord' ? 'Владелец' : 'Турист'}
-                </span>
+                <span className="max-w-[80px] sm:max-w-[120px] truncate">{user.name || 'Профиль'}</span>
               </Link>
 
               {user.role === 'landlord' && (
                 <Link
                   href="/add-property"
-                  className="bg-blue-600 text-white font-bold text-xs px-3 sm:px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors shadow-sm shadow-blue-500/20 whitespace-nowrap hidden sm:inline-block"
+                  className="bg-blue-600 text-white font-bold text-xs px-3 sm:px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors shadow-sm shadow-blue-500/20 whitespace-nowrap hidden md:inline-block"
                 >
                   + Сдать жилье
                 </Link>

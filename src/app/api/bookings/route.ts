@@ -78,3 +78,30 @@ export async function POST(request: Request) {
     );
   }
 }
+
+// Обновление статуса бронирования (Заселение, Выселение, Не приехал)
+export async function PATCH(request: Request) {
+  try {
+    const { bookingId, status } = await request.json();
+
+    if (!bookingId || !status) {
+      return NextResponse.json({ error: 'bookingId и status обязательны' }, { status: 400 });
+    }
+
+    const validStatuses = ['confirmed', 'checked_in', 'no_show', 'completed', 'cancelled'];
+    if (!validStatuses.includes(status)) {
+      return NextResponse.json({ error: 'Недопустимый статус' }, { status: 400 });
+    }
+
+    await sql`
+      UPDATE bookings
+      SET status = ${status}
+      WHERE id = ${bookingId}::uuid
+    `;
+
+    return NextResponse.json({ success: true, status });
+  } catch (error: any) {
+    console.error('Ошибка обновления статуса бронирования:', error);
+    return NextResponse.json({ error: 'Ошибка сервера при обновлении статуса' }, { status: 500 });
+  }
+}

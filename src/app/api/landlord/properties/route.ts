@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { sql } from '@/lib/db';
+import { validatePropertyContent } from '@/utils/moderation';
 
 // 1. Получение объектов и аналитики владельца
 export async function GET(request: Request) {
@@ -112,6 +113,14 @@ export async function PUT(request: Request) {
         WHERE id = ${id}::uuid
       `;
     } else {
+      // Авто-модерация текста при редактировании
+      if (title) {
+        const modCheck = validatePropertyContent({ title, description, address });
+        if (!modCheck.isValid) {
+          return NextResponse.json({ error: modCheck.error || 'Обнаружен недопустимый текст' }, { status: 400 });
+        }
+      }
+
       // Полное обновление данных объекта
       const amenitiesArray = Array.isArray(amenities)
         ? amenities

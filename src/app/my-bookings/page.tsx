@@ -193,7 +193,11 @@ export default function MyBookingsPage() {
                           <Star className="w-4 h-4 fill-amber-400 text-amber-500" />
                           <span>☀️ {Number(b.review_rating)} / 5 Рахата</span>
                         </div>
-                      ) : (
+                      ) : b.status === 'no_show' || b.status === 'cancelled' ? (
+                        <span className="inline-flex items-center text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-100 px-3 py-1.5 rounded-xl">
+                          Поездка не состоялась
+                        </span>
+                      ) : b.status === 'checked_in' || b.status === 'completed' ? (
                         <button
                           type="button"
                           onClick={() => setSelectedBooking(b)}
@@ -202,6 +206,10 @@ export default function MyBookingsPage() {
                           <Sparkles className="w-3.5 h-3.5" />
                           <span>Оценить отдых ☀️</span>
                         </button>
+                      ) : (
+                        <span className="inline-flex items-center text-[11px] font-semibold text-slate-500 bg-slate-100 border border-slate-200/60 px-3 py-1.5 rounded-xl">
+                          Отзыв после заселения 🔑
+                        </span>
                       )}
                     </div>
 

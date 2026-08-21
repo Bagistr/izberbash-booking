@@ -7,12 +7,16 @@ export interface User {
   name: string;
   phone: string;
   role: 'guest' | 'landlord';
+  activeRole?: 'guest' | 'landlord';
+  telegram_id?: string;
+  is_landlord?: boolean;
 }
 
 interface AuthContextType {
   user: User | null;
   login: (userData: User) => void;
   logout: () => void;
+  switchRole: (newRole: 'guest' | 'landlord') => Promise<void>;
   isLoading: boolean;
 }
 
@@ -20,6 +24,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   login: () => {},
   logout: () => {},
+  switchRole: async () => {},
   isLoading: true,
 });
 
@@ -31,7 +36,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const stored = localStorage.getItem('dagbooking_auth_user');
       if (stored) {
-        setUser(JSON.parse(stored));
+        const parsed = JSON.parse(stored);
+        if (parsed.role === 'landlord') {
+          parsed.is_landlord = true;
+        }
+        setUser(parsed);
       }
     } catch (e) {
       console.error(e);
@@ -41,11 +50,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = (userData: User) => {
-    setUser(userData);
-    localStorage.setItem('dagbooking_auth_user', JSON.stringify(userData));
-    // Чистим старые конфликтующие ключи
+    const updated = {
+      ...userData,
+      is_landlord: userData.role === 'landlord' || userData.is_landlord === true,
+      activeRole: userData.activeRole || userData.role,
+    };
+    setUser(updated);
+    localStorage.setItem('dagbooking_auth_user', JSON.stringify(updated));
     localStorage.removeItem('rp_user');
     localStorage.removeItem('landlord_user');
+  };
+
+  const switchRole = async (newRole: 'guest' | 'landlord') => {
+    if (!user) return;
+
+    try {
+      if (user.phone) {
+        await fetch('/api/auth/switch-role', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: user.phone, newRole }),
+        });
+      }
+    } catch (e) {
+      console.error('Ошибка синхронизации роли с сервером:', e);
+    }
+
+    const updatedUser: User = {
+      ...user,
+      role: newRole,
+      activeRole: newRole,
+      is_landlord: user.is_landlord || newRole === 'landlord' || user.role === 'landlord',
+    };
+    setUser(updatedUser);
+    localStorage.setItem('dagbooking_auth_user', JSON.stringify(updatedUser));
   };
 
   const logout = () => {
@@ -56,7 +94,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, logout, switchRole, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

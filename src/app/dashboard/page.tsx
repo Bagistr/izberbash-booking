@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Property } from '@/types/property';
 import { ImageCropperModal } from '@/components/ImageCropperModal';
+import { validatePropertyContent } from '@/utils/moderation';
 
 interface BookingItem {
   id: string;
@@ -279,6 +280,67 @@ export default function DashboardPage() {
     }
   };
 
+  // Проверка доступности кнопки «Не приехал» (строго после 20:00 МСК в день заезда)
+  const isNoShowAvailable = (checkInDateStr: string) => {
+    try {
+      const now = new Date();
+      const mskFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Europe/Moscow',
+        year: 'numeric', month: 'numeric', day: 'numeric',
+        hour: 'numeric', minute: 'numeric', hour12: false
+      });
+      const parts = mskFormatter.formatToParts(now);
+      const mskParts: any = {};
+      parts.forEach(p => mskParts[p.type] = p.value);
+
+      const mskYear = Number(mskParts.year);
+      const mskMonth = Number(mskParts.month);
+      const mskDay = Number(mskParts.day);
+      const mskHour = Number(mskParts.hour);
+
+      const checkIn = new Date(checkInDateStr);
+      const cYear = checkIn.getFullYear();
+      const cMonth = checkIn.getMonth() + 1;
+      const cDay = checkIn.getDate();
+
+      // Если дата заезда уже прошла (вчера или раньше)
+      if (mskYear > cYear || (mskYear === cYear && mskMonth > cMonth) || (mskYear === cYear && mskMonth === cMonth && mskDay > cDay)) {
+        return true;
+      }
+
+      // Если сегодня день заезда — активно только после 20:00
+      if (mskYear === cYear && mskMonth === cMonth && mskDay === cDay) {
+        return mskHour >= 20;
+      }
+
+      return false;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  // Смена статуса бронирования арендодателем
+  const handleUpdateBookingStatus = async (bookingId: string, status: string) => {
+    try {
+      const res = await fetch('/api/bookings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId, status }),
+      });
+
+      if (res.ok) {
+        if (user?.phone) loadData(user.phone);
+        if (selectedDayBookings) {
+          setSelectedDayBookings((prev) =>
+            prev ? prev.map((b) => (b.id === bookingId ? { ...b, status } : b)) : null
+          );
+        }
+      }
+    } catch (err) {
+      console.error('Ошибка обновления статуса бронирования:', err);
+    }
+  };
+
   const handleOpenEdit = (p: Property) => {
     setEditingProperty(p);
     setEditFormData({
@@ -382,9 +444,25 @@ export default function DashboardPage() {
     }
   };
 
+  const [editError, setEditError] = useState('');
+
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editFormData) return;
+    setEditError('');
+
+    // Авто-модерация текста
+    const modCheck = validatePropertyContent({
+      title: editFormData.title,
+      description: editFormData.description,
+      address: editFormData.address,
+    });
+
+    if (!modCheck.isValid) {
+      setEditError(modCheck.error || 'Обнаружен недопустимый текст');
+      return;
+    }
+
     setSavingEdit(true);
 
     try {
@@ -394,14 +472,15 @@ export default function DashboardPage() {
         body: JSON.stringify(editFormData),
       });
 
-      if (res.ok) {
-        setProperties((prev) =>
-          prev.map((p) => (p.id === editFormData.id ? { ...editFormData } : p))
-        );
-        setEditingProperty(null);
-      }
-    } catch (err) {
-      console.error('Ошибка сохранения:', err);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Ошибка сохранения');
+
+      setProperties((prev) =>
+        prev.map((p) => (p.id === editFormData.id ? { ...editFormData } : p))
+      );
+      setEditingProperty(null);
+    } catch (err: any) {
+      setEditError(err.message || 'Ошибка сохранения');
     } finally {
       setSavingEdit(false);
     }
@@ -1098,13 +1177,66 @@ export default function DashboardPage() {
                     <div className="text-xs text-slate-700 space-y-1">
                       <p><span>{isBlocked ? 'Источник:' : 'Гость:'} <strong>{b.guest_name}</strong></span></p>
                       {!isBlocked && (
-                        <p><span>Телефон: <strong>{b.guest_phone}</strong></span></p>
+                        <>
+                          <p><span>Телефон: <strong>{b.guest_phone}</strong></span></p>
+                          <div className="flex items-center gap-1 pt-0.5">
+                            <span className="text-slate-400">Статус:</span>
+                            {b.status === 'checked_in' && <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-md text-[10px]">🔑 Гость заселился</span>}
+                            {b.status === 'completed' && <span className="bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-md text-[10px]">✅ Выселился (Завершено)</span>}
+                            {b.status === 'no_show' && <span className="bg-rose-100 text-rose-800 font-bold px-2 py-0.5 rounded-md text-[10px]">❌ Не приехал (Отзыв заблокирован)</span>}
+                            {(!b.status || b.status === 'confirmed' || b.status === 'new') && <span className="bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-md text-[10px]">⏳ Ожидает заезда</span>}
+                          </div>
+                        </>
                       )}
                       <p><span>Даты: с {b.check_in.slice(0, 10)} по {b.check_out.slice(0, 10)} ({b.total_days} н.)</span></p>
                       {!isBlocked && (
                         <p><span>Сумма: <strong>{b.total_price.toLocaleString('ru-RU')} ₽</strong></span></p>
                       )}
                     </div>
+
+                    {/* Управление статусом заселения для бронирований платформы */}
+                    {!isBlocked && (
+                      <div className="pt-2 border-t border-slate-200 flex flex-wrap gap-2">
+                        {(!b.status || b.status === 'confirmed' || b.status === 'new') && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateBookingStatus(b.id, 'checked_in')}
+                              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2 px-3 rounded-xl transition-all shadow-xs cursor-pointer text-center"
+                            >
+                              Гость заселился 🔑
+                            </button>
+
+                            {isNoShowAvailable(b.check_in) ? (
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateBookingStatus(b.id, 'no_show')}
+                                className="bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs py-2 px-3 rounded-xl transition-all cursor-pointer text-center"
+                              >
+                                Не приехал ❌
+                              </button>
+                            ) : (
+                              <span
+                                className="text-[10px] text-slate-400 font-medium bg-slate-100 px-2.5 py-1.5 rounded-xl text-center self-center"
+                                title="Кнопка станет активна после 20:00 в день заезда"
+                              >
+                                «Не приехал» доступно с 20:00 МСК
+                              </span>
+                            )}
+                          </>
+                        )}
+
+                        {b.status === 'checked_in' && (
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateBookingStatus(b.id, 'completed')}
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2.5 rounded-xl transition-all shadow-xs cursor-pointer text-center"
+                          >
+                            Отметить выселение ✅
+                          </button>
+                        )}
+                      </div>
+                    )}
 
                     {isBlocked && (
                       <div className="pt-2 border-t border-slate-200">
@@ -1135,6 +1267,12 @@ export default function DashboardPage() {
             </button>
 
             <h3 className="text-xl font-bold text-slate-900 mb-4">Редактирование объявления</h3>
+
+            {editError && (
+              <div className="p-3.5 bg-red-50 text-red-600 border border-red-200 rounded-2xl text-xs font-bold mb-4">
+                {editError}
+              </div>
+            )}
 
             <form onSubmit={handleSaveEdit} className="space-y-4">
               <div>

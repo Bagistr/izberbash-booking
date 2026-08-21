@@ -30,6 +30,13 @@ export async function POST(request: Request) {
       );
     }
 
+    if (action === 'reset_password' && existingUser.length === 0) {
+      return NextResponse.json(
+        { error: 'Пользователь с таким номером телефона не найден. Проверьте номер или зарегистрируйтесь.' },
+        { status: 404 }
+      );
+    }
+
     const publicKey = process.env.ZVONOK_PUBLIC_KEY;
     const campaignId = process.env.ZVONOK_CAMPAIGN_ID || '2003856983';
 

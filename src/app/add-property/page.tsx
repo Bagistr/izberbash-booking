@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { Waves, ArrowLeft, Building2, X, CheckCircle2, ImagePlus, Plus, Trash2, Layers, Check, Home } from 'lucide-react';
 import { ImageCropperModal } from '@/components/ImageCropperModal';
+import { validatePropertyContent } from '@/utils/moderation';
 
 const PRESET_AMENITIES = [
   'Wi-Fi', 'Кондиционер', 'Мангал', 'Бассейн', 'Беседка', 
@@ -173,6 +174,19 @@ export default function AddPropertyPage() {
 
     if (photos.length === 0) {
       setErrorMsg('Пожалуйста, загрузите хотя бы одну фотографию.');
+      setLoading(false);
+      return;
+    }
+
+    // Авто-модерация текста
+    const modCheck = validatePropertyContent({
+      title: formData.title,
+      description: formData.description,
+      address: formData.address,
+    });
+
+    if (!modCheck.isValid) {
+      setErrorMsg(modCheck.error || 'Обнаружен недопустимый текст.');
       setLoading(false);
       return;
     }

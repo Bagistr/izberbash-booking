@@ -120,8 +120,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Заполните все обязательные поля' }, { status: 400 });
     }
 
-    // Проверяем, не оставлял ли гость уже отзыв по этому бронированию
+    // Проверяем статус бронирования и дубликаты
     if (bookingId) {
+      const bookingCheck = await sql`
+        SELECT status FROM bookings
+        WHERE id = ${bookingId}::uuid
+        LIMIT 1
+      `;
+      if (bookingCheck.length > 0) {
+        const bStatus = bookingCheck[0].status;
+        if (bStatus === 'no_show' || bStatus === 'cancelled') {
+          return NextResponse.json(
+            { error: 'Отзыв недоступен, так как поездка была отменена или гость не заселился' },
+            { status: 400 }
+          );
+        }
+      }
+
       const existing = await sql`
         SELECT id FROM reviews 
         WHERE booking_id = ${bookingId}::uuid
