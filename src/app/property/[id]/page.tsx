@@ -330,6 +330,50 @@ export default function PropertyDetailPage() {
               </div>
             </div>
 
+            {/* ПРАВИЛА ЗАСЕЛЕНИЯ И ПРОЖИВАНИЯ */}
+            <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-blue-600" />
+                  <span>Правила заселения и проживания</span>
+                </h2>
+                <Link
+                  href="/rules"
+                  className="text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors"
+                >
+                  Все правила →
+                </Link>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                <div className="p-3.5 bg-blue-50/60 rounded-2xl border border-blue-100 flex items-start space-x-3">
+                  <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-xs flex-shrink-0">
+                    14:00
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900">Заезд с 14:00</h4>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Хозяин подготовит домик к вашему приезду</p>
+                  </div>
+                </div>
+
+                <div className="p-3.5 bg-amber-50/60 rounded-2xl border border-amber-100 flex items-start space-x-3">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold text-xs flex-shrink-0">
+                    12:00
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900">Выезд до 12:00</h4>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Время для уборки перед следующими гостями</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-xs text-slate-600 space-y-1.5">
+                <p>• <strong>Бесплатная отмена:</strong> за 3 дня до даты заезда (аванс 5% возвращается полностью).</p>
+                <p>• <strong>Режим тишины:</strong> с 23:00 до 08:00 (уважаем отдых семей и соседей).</p>
+                <p>• <strong>Курение:</strong> разрешено только в отведенных зонах на свежем воздухе.</p>
+              </div>
+            </div>
+
             {/* БЛОК ОТЗЫВОВ И УРОВЕНЬ РАХАТА ☀️ */}
             <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">

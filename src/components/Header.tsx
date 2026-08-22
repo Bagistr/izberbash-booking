@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Waves, User, LayoutDashboard, LogOut } from 'lucide-react';
+import { Waves, User, LayoutDashboard, LogOut, MessageCircle, HelpCircle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 export const Header: React.FC = () => {
@@ -21,8 +21,18 @@ export const Header: React.FC = () => {
           </span>
         </Link>
 
-        {/* Правая часть: Вход / Кабинет / Мои поездки / Сдать жилье */}
+        {/* Правая часть: Вход / Кабинет / Мои поездки / Сдать жилье / Поддержка */}
         <div className="flex items-center space-x-2 sm:space-x-3">
+          {/* Ссылка на поддержку */}
+          <Link
+            href="/contacts"
+            className="inline-flex items-center space-x-1 text-slate-600 hover:text-blue-600 text-xs font-semibold px-2 py-1.5 rounded-lg hover:bg-slate-50 transition-colors"
+            title="Служба заботы"
+          >
+            <HelpCircle className="w-4 h-4 text-slate-500" />
+            <span className="hidden sm:inline">Помощь</span>
+          </Link>
+
           {user ? (
             <div className="flex items-center space-x-2">
               {/* Прямая ссылка на Мои поездки */}
