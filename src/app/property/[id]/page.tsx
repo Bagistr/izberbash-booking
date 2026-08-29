@@ -368,6 +368,7 @@ export default function PropertyDetailPage() {
               </div>
 
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-xs text-slate-600 space-y-1.5">
+                <p>• <strong>Минимальный срок проживания:</strong> {property.min_nights || 1} {Number(property.min_nights || 1) === 1 ? 'сутки' : Number(property.min_nights || 1) < 5 ? 'суток' : 'суток'}.</p>
                 <p>• <strong>Бесплатная отмена:</strong> за 3 дня до даты заезда (аванс 5% возвращается полностью).</p>
                 <p>• <strong>Режим тишины:</strong> с 23:00 до 08:00 (уважаем отдых семей и соседей).</p>
                 <p>• <strong>Курение:</strong> разрешено только в отведенных зонах на свежем воздухе.</p>

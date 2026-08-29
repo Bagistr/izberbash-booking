@@ -31,7 +31,19 @@ export async function GET(
       SELECT id, name FROM property_units WHERE property_id = ${id} ORDER BY created_at ASC
     `;
 
-    return NextResponse.json({ bookings, units });
+    let seasonalPrices: any[] = [];
+    try {
+      seasonalPrices = await sql`
+        SELECT start_date, end_date, price
+        FROM property_seasonal_prices
+        WHERE property_id = ${id}
+        ORDER BY start_date ASC
+      `;
+    } catch (e) {
+      // Игнорируем, если таблица еще не создана
+    }
+
+    return NextResponse.json({ bookings, units, seasonalPrices });
   } catch (error) {
     console.error('Ошибка загрузки занятых дат:', error);
     return NextResponse.json({ error: 'Ошибка сервера' }, { status: 500 });

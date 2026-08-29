@@ -40,6 +40,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
   const [units, setUnits] = useState<Unit[]>([]);
   const [selectedUnitId, setSelectedUnitId] = useState<string>('');
   const [bookedRanges, setBookedRanges] = useState<BookedRange[]>([]);
+  const [seasonalPrices, setSeasonalPrices] = useState<any[]>([]);
   const [calDate, setCalDate] = useState(new Date());
 
   const [loading, setLoading] = useState(false);
@@ -54,6 +55,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
         if (res.ok) {
           const data = await res.json();
           setBookedRanges(data.bookings || []);
+          setSeasonalPrices(data.seasonalPrices || []);
           if (data.units && data.units.length > 0 && units.length === 0) {
             setUnits(data.units);
             setSelectedUnitId(data.units[0].id);
@@ -119,7 +121,31 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
     const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     
     if (days <= 0) return { days: 0, price: 0 };
-    return { days, price: days * property.price_per_night };
+
+    let totalPrice = 0;
+    const tempDate = new Date(start);
+    for (let i = 0; i < days; i++) {
+      const year = tempDate.getFullYear();
+      const month = String(tempDate.getMonth() + 1).padStart(2, '0');
+      const day = String(tempDate.getDate()).padStart(2, '0');
+      const curDateStr = `${year}-${month}-${day}`;
+
+      const seasonal = seasonalPrices.find((sp) => {
+        const spStart = sp.start_date.slice(0, 10);
+        const spEnd = sp.end_date.slice(0, 10);
+        return curDateStr >= spStart && curDateStr <= spEnd;
+      });
+
+      if (seasonal) {
+        totalPrice += Number(seasonal.price);
+      } else {
+        totalPrice += property.price_per_night;
+      }
+
+      tempDate.setDate(tempDate.getDate() + 1);
+    }
+
+    return { days, price: totalPrice };
   };
 
   const { days, price } = calculateTotal();
@@ -130,6 +156,12 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
 
     if (days <= 0) {
       setErrorMsg('Пожалуйста, выберите дату заезда и выезда.');
+      return;
+    }
+
+    const minNights = property.min_nights || 1;
+    if (days < minNights) {
+      setErrorMsg(`Минимальный срок бронирования для этого объекта — ${minNights} сут. Вы выбрали ${days} сут.`);
       return;
     }
 
@@ -357,13 +389,13 @@ export const BookingModal: React.FC<BookingModalProps> = ({ property, onClose })
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Ваше имя</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Имя и Фамилия</label>
                 <div className="relative">
                   <User className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
                   <input
                     type="text"
                     required
-                    placeholder="Магомед"
+                    placeholder="Имя и Фамилия"
                     value={guestName}
                     onChange={(e) => setGuestName(e.target.value)}
                     className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5"

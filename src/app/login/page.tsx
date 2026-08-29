@@ -284,37 +284,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Быстрый вход через Telegram (только для режима входа/регистрации) */}
-          {authMode !== 'forgot' && (
-            <div className="space-y-3">
-              <button
-                type="button"
-                onClick={handleTelegramLogin}
-                disabled={tgLoading}
-                className="w-full bg-[#229ED9] hover:bg-[#1E88E5] text-white font-bold text-sm py-3.5 px-4 rounded-2xl flex items-center justify-center space-x-2.5 shadow-lg shadow-blue-400/25 transition-all cursor-pointer"
-              >
-                <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
-                </svg>
-                <span>Войти через Telegram</span>
-              </button>
 
-              {tgWaiting && (
-                <div className="p-3.5 bg-blue-50 border border-blue-100 rounded-2xl flex items-center space-x-3 text-left">
-                  <Loader2 className="w-5 h-5 text-blue-600 animate-spin flex-shrink-0" />
-                  <p className="text-xs text-blue-800 font-medium leading-relaxed">
-                    Нажмите <b>«Запустить» (Start)</b> в открывшемся боте — страница автоматически откроется.
-                  </p>
-                </div>
-              )}
-
-              <div className="relative flex py-2 items-center">
-                <div className="flex-grow border-t border-slate-200"></div>
-                <span className="flex-shrink mx-3 text-[11px] font-bold text-slate-400 uppercase">или по номеру телефона</span>
-                <div className="flex-grow border-t border-slate-200"></div>
-              </div>
-            </div>
-          )}
 
           {/* ФОРМА ВОССТАНОВЛЕНИЯ ПАРОЛЯ */}
           {authMode === 'forgot' ? (
@@ -405,13 +375,13 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               {authMode === 'register' && (
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">Ваше имя</label>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">Имя и Фамилия</label>
                   <div className="relative">
                     <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
                     <input
                       type="text"
                       required
-                      placeholder="Например: Багаудин"
+                      placeholder="Имя и Фамилия"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 font-semibold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
@@ -518,7 +488,38 @@ export default function LoginPage() {
             </form>
           )}
 
-          <div className="text-center pt-2">
+          {authMode !== 'forgot' && (
+            <div className="mt-4 pt-2 border-t border-slate-100 space-y-3">
+              <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-slate-100"></div>
+                <span className="flex-shrink mx-3 text-[10px] font-bold text-slate-400 uppercase">или быстрый вход</span>
+                <div className="flex-grow border-t border-slate-100"></div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleTelegramLogin}
+                disabled={tgLoading}
+                className="w-full bg-[#229ED9] hover:bg-[#1E88E5] text-white font-bold text-xs py-3.5 px-4 rounded-xl flex items-center justify-center space-x-2 shadow-md shadow-blue-400/10 transition-all cursor-pointer"
+              >
+                <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
+                </svg>
+                <span>Войти через Telegram</span>
+              </button>
+
+              {tgWaiting && (
+                <div className="p-3.5 bg-blue-50 border border-blue-100 rounded-xl flex items-center space-x-3 text-left">
+                  <Loader2 className="w-4 h-4 text-blue-600 animate-spin flex-shrink-0" />
+                  <p className="text-xs text-blue-800 font-medium leading-relaxed">
+                    Нажмите <b>«Запустить» (Start)</b> в открывшемся боте — страница автоматически авторизуется.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="text-center pt-4">
             {authMode === 'forgot' ? (
               <button
                 type="button"

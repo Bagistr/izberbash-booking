@@ -66,9 +66,23 @@ export async function GET(request: Request) {
         ? (totalDays / allOccupiedBookings.length).toFixed(1)
         : '0';
 
+    let seasonalPrices: any[] = [];
+    if (propertyIds.length > 0) {
+      try {
+        seasonalPrices = await sql`
+          SELECT id, property_id, start_date, end_date, price
+          FROM property_seasonal_prices
+          WHERE property_id = ANY(${propertyIds}::uuid[])
+        `;
+      } catch (e) {
+        // Игнорируем
+      }
+    }
+
     return NextResponse.json({
       properties,
       bookings,
+      seasonalPrices,
       stats: {
         totalRevenue,
         netRevenue,
@@ -99,6 +113,7 @@ export async function PUT(request: Request) {
       amenities,
       photos,
       is_active,
+      min_nights,
     } = body;
 
     if (!id) {
@@ -147,7 +162,8 @@ export async function PUT(request: Request) {
             description = ${description || ''},
             amenities = ${amenitiesArray},
             photos = ${photosArray},
-            is_active = ${is_active !== undefined ? Boolean(is_active) : true}
+            is_active = ${is_active !== undefined ? Boolean(is_active) : true},
+            min_nights = ${Number(min_nights) || 1}
           WHERE id = ${id}::uuid
         `;
       } else {
@@ -162,7 +178,8 @@ export async function PUT(request: Request) {
             address = ${address},
             description = ${description || ''},
             amenities = ${amenitiesArray},
-            is_active = ${is_active !== undefined ? Boolean(is_active) : true}
+            is_active = ${is_active !== undefined ? Boolean(is_active) : true},
+            min_nights = ${Number(min_nights) || 1}
           WHERE id = ${id}::uuid
         `;
       }

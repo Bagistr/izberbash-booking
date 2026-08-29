@@ -84,9 +84,16 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({ property, onBook }) 
           />
         </Link>
 
-        {/* Бейдж расстояния */}
-        <div className="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full z-10">
-          {property.distance_to_sea} м до моря
+        {/* Бейджи */}
+        <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-10">
+          <div className="bg-slate-900/80 backdrop-blur-md text-white text-[11px] font-bold px-3 py-1.5 rounded-full">
+            🌊 {property.distance_to_sea} м до моря
+          </div>
+          {property.units && property.units.length > 1 && (
+            <div className="bg-emerald-600/90 backdrop-blur-md text-white text-[11px] font-bold px-3 py-1.5 rounded-full flex items-center gap-1">
+              <span>🏠 Комплекс: {property.units.length} домиков</span>
+            </div>
+          )}
         </div>
 
         {/* Кнопка сердечка (Коралловый акцент) */}

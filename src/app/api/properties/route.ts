@@ -2,9 +2,36 @@ import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { sql } from '@/lib/db';
 
+async function ensureDbSchema() {
+  try {
+    await sql`
+      ALTER TABLE properties 
+      ADD COLUMN IF NOT EXISTS min_nights INT DEFAULT 1;
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS property_seasonal_prices (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        property_id UUID NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        price NUMERIC NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `;
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_seasonal_prices_property 
+      ON property_seasonal_prices(property_id);
+    `;
+  } catch (e) {
+    console.error('Ошибка создания схемы БД:', e);
+  }
+}
+
 // Получение списка объектов с их домиками
 export async function GET() {
   try {
+    await ensureDbSchema();
+
     const properties = await sql`
       SELECT * FROM properties 
       WHERE is_active = true 
@@ -63,6 +90,7 @@ export async function POST(request: Request) {
       photos,
       landlord_phone,
       units, // Массив названий домиков, например ['Коттедж №1', 'Коттедж №2']
+      min_nights,
     } = body;
 
     if (!title || !price_per_night || !distance_to_sea || !address || !landlord_phone) {
@@ -95,13 +123,13 @@ export async function POST(request: Request) {
       INSERT INTO properties (
         title, slug, property_type, price_per_night, max_guests, 
         distance_to_sea, address, description, amenities, photos, 
-        landlord_phone, is_active
+        landlord_phone, is_active, min_nights
       )
       VALUES (
         ${title}, ${slug}, ${property_type || 'house'}, ${Number(price_per_night)}, 
         ${Number(max_guests) || 2}, ${Number(distance_to_sea)}, ${address}, 
         ${description || ''}, ${amenitiesArray}, ${finalPhotos}, 
-        ${landlord_phone}, true
+        ${landlord_phone}, true, ${Number(min_nights) || 1}
       )
       RETURNING id
     `;

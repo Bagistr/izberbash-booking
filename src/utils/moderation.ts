@@ -75,6 +75,69 @@ export function checkContentProfanity(text: string): { isValid: boolean; reason?
 }
 
 /**
+ * Проверка текста на наличие контактных данных (телефоны, ссылки, соцсети)
+ */
+export function checkForContacts(text: string): { isValid: boolean; reason?: string } {
+  if (!text || typeof text !== 'string') return { isValid: true };
+
+  const lower = text.toLowerCase();
+
+  // 1. Поиск последовательностей цифр (телефонов)
+  // Маскирует: 8-900-123-45-67, +7 900 123 4567, 89001234567, 8.9.0.0.1...
+  const phonePattern = /(?:\+?7|8)[\s_.-]*\(?\d{3}\)?[\s_.-]*\d{3}[\s_.-]*\d{2}[\s_.-]*\d{2}/;
+  const consecutiveDigitsPattern = /(?:\d[\s_.-]*){7,}/;
+
+  if (phonePattern.test(lower) || consecutiveDigitsPattern.test(lower)) {
+    return {
+      isValid: false,
+      reason: 'Указывать контактные телефоны в описании запрещено. Гость получит ваш номер автоматически после бронирования.',
+    };
+  }
+
+  // 2. Мессенджеры, соцсети и призывы связаться напрямую
+  const contactKeywords = [
+    /t\.me/i,
+    /wa\.me/i,
+    /viber/i,
+    /instagram/i,
+    /инстаграм/i,
+    /инста\b/i,
+    /телеграм/i,
+    /ватсап/i,
+    /вацап/i,
+    /вконтакте/i,
+    /авито/i,
+    /avito/i,
+    /vk\.com/i,
+    /пишите на/i,
+    /звоните на/i,
+    /номер для связи/i,
+    /связаться напрямую/i,
+    /tg:/i,
+    /тг:/i,
+  ];
+
+  for (const keyword of contactKeywords) {
+    if (keyword.test(lower)) {
+      return {
+        isValid: false,
+        reason: 'Указывать ссылки на соцсети, мессенджеры или призывы к связи напрямую в описании запрещено.',
+      };
+    }
+  }
+
+  // 3. Юзернеймы через @
+  if (/@\w{3,}/.test(lower)) {
+    return {
+      isValid: false,
+      reason: 'Указывать юзернеймы мессенджеров (через @) в тексте запрещено.',
+    };
+  }
+
+  return { isValid: true };
+}
+
+/**
  * Комплексная валидация всех полей объекта недвижимости
  */
 export function validatePropertyContent({
@@ -94,6 +157,14 @@ export function validatePropertyContent({
     };
   }
 
+  const titleContactCheck = checkForContacts(title);
+  if (!titleContactCheck.isValid) {
+    return {
+      isValid: false,
+      error: titleContactCheck.reason,
+    };
+  }
+
   if (address) {
     const addressCheck = checkContentProfanity(address);
     if (!addressCheck.isValid) {
@@ -110,6 +181,14 @@ export function validatePropertyContent({
       return {
         isValid: false,
         error: `В описании объекта обнаружена ненормативная лексика или запрещенный контент.`,
+      };
+    }
+
+    const descContactCheck = checkForContacts(description);
+    if (!descContactCheck.isValid) {
+      return {
+        isValid: false,
+        error: descContactCheck.reason,
       };
     }
   }

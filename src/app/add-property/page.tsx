@@ -24,6 +24,7 @@ export default function AddPropertyPage() {
     address: '',
     description: '',
     landlord_phone: '',
+    min_nights: '1',
   });
 
   const [units, setUnits] = useState<string[]>(['Домик №1', 'Домик №2']);
@@ -404,7 +405,7 @@ export default function AddPropertyPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 uppercase mb-2">До моря (метров) *</label>
                     <input
@@ -419,7 +420,7 @@ export default function AddPropertyPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Макс. гостей</label>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Макс. гостей *</label>
                     <input
                       type="number"
                       name="max_guests"
@@ -429,6 +430,22 @@ export default function AddPropertyPage() {
                       onChange={handleChange}
                       className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Минимум суток</label>
+                    <select
+                      name="min_nights"
+                      value={formData.min_nights}
+                      onChange={handleChange}
+                      className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="1">1 сутки</option>
+                      <option value="2">2 суток</option>
+                      <option value="3">3 суток</option>
+                      <option value="5">5 суток</option>
+                      <option value="7">7 суток</option>
+                    </select>
                   </div>
                 </div>
 

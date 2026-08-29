@@ -48,6 +48,7 @@ export default function DashboardPage() {
 
   const [properties, setProperties] = useState<Property[]>([]);
   const [bookings, setBookings] = useState<BookingItem[]>([]);
+  const [seasonalPrices, setSeasonalPrices] = useState<any[]>([]);
   const [stats, setStats] = useState({
     totalRevenue: 0,
     netRevenue: 0,
@@ -74,6 +75,10 @@ export default function DashboardPage() {
 
   // Модалка блокировки дат
   const [isBlockModalOpen, setIsBlockModalOpen] = useState(false);
+  const [activeBlockTab, setActiveBlockTab] = useState<'block' | 'price'>('block');
+  const [seasonalPriceInput, setSeasonalPriceInput] = useState('');
+  const [savingPrice, setSavingPrice] = useState(false);
+  const [priceError, setPriceError] = useState('');
   const [blockForm, setBlockForm] = useState({
     property_id: '',
     unit_id: '',
@@ -107,6 +112,7 @@ export default function DashboardPage() {
         const data = await res.json();
         setProperties(data.properties || []);
         setBookings(data.bookings || []);
+        setSeasonalPrices(data.seasonalPrices || []);
         if (data.stats) setStats(data.stats);
 
         if (data.properties && data.properties.length > 0) {
@@ -260,6 +266,36 @@ export default function DashboardPage() {
       setBlockError(err.message || 'Не удалось заблокировать даты');
     } finally {
       setSavingBlock(false);
+    }
+  };
+
+  const handleSavePrice = async (e: React.FormEvent, reset = false) => {
+    e.preventDefault();
+    setSavingPrice(true);
+    setPriceError('');
+
+    try {
+      const res = await fetch('/api/landlord/seasonal-prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          property_id: blockForm.property_id,
+          start_date: blockForm.check_in,
+          end_date: blockForm.check_out,
+          price: reset ? 0 : Number(seasonalPriceInput),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Ошибка при сохранении цен');
+
+      setIsBlockModalOpen(false);
+      setSeasonalPriceInput('');
+      if (user) loadData(user.phone);
+    } catch (err: any) {
+      setPriceError(err.message || 'Не удалось обновить цену');
+    } finally {
+      setSavingPrice(false);
     }
   };
 
@@ -748,6 +784,18 @@ export default function DashboardPage() {
                 const isOccupied = dayBookings.length > 0;
                 const hasPlatformBooking = dayBookings.some((b) => b.status !== 'blocked');
 
+                // Находим сезонную цену для этой даты и этого объекта недвижимости
+                const activePropId = selectedPropertyFilter !== 'all' ? selectedPropertyFilter : (properties[0]?.id || '');
+                const matchedPrice = seasonalPrices.find((sp) => {
+                  const spStart = sp.start_date.slice(0, 10);
+                  const spEnd = sp.end_date.slice(0, 10);
+                  return sp.property_id === activePropId && formattedDate >= spStart && formattedDate <= spEnd;
+                });
+                
+                // Находим базовую цену объекта
+                const basePrice = properties.find((p) => p.id === activePropId)?.price_per_night || 0;
+                const currentDayPrice = matchedPrice ? Number(matchedPrice.price) : basePrice;
+
                 return (
                   <div
                     key={dayNum}
@@ -771,6 +819,11 @@ export default function DashboardPage() {
                       <span className={`text-xs font-bold ${isOccupied ? (hasPlatformBooking ? 'text-blue-700' : 'text-slate-700') : 'text-slate-600'}`}>
                         {dayNum}
                       </span>
+                      {!isOccupied && currentDayPrice > 0 && (
+                        <span className={`text-[9px] font-black ${matchedPrice ? 'text-blue-600 bg-blue-50 border border-blue-100 rounded-md px-1 py-0.5' : 'text-slate-400 font-medium'}`}>
+                          {currentDayPrice.toLocaleString('ru-RU')} ₽
+                        </span>
+                      )}
                       {isOccupied ? (
                         <span className={`w-2 h-2 rounded-full ${hasPlatformBooking ? 'bg-blue-600' : 'bg-slate-500'}`}></span>
                       ) : (
@@ -797,6 +850,88 @@ export default function DashboardPage() {
               })}
             </div>
           </div>
+        </div>
+
+        {/* РАЗДЕЛ: ЗАЯВКИ И БРОНИРОВАНИЯ */}
+        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-6">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+            <h2 className="text-lg font-bold text-slate-900">Бронирования и заявки ({filteredBookings.filter(b => b.status !== 'blocked').length})</h2>
+          </div>
+
+          {filteredBookings.filter(b => b.status !== 'blocked').length === 0 ? (
+            <p className="text-slate-500 text-xs text-center py-6">У вас пока нет бронирований.</p>
+          ) : (
+            <div className="divide-y divide-slate-100 max-h-[400px] overflow-y-auto pr-1">
+              {filteredBookings.filter(b => b.status !== 'blocked').map((b) => {
+                return (
+                  <div key={b.id} className="py-4 first:pt-0 last:pb-0 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-xs text-slate-900">{b.guest_name}</span>
+                        <a href={`tel:${b.guest_phone}`} className="text-[10px] text-blue-600 hover:underline">{b.guest_phone}</a>
+                        {b.guest_telegram && (
+                          <a href={`https://t.me/${b.guest_telegram.replace('@', '')}`} target="_blank" rel="noopener noreferrer" className="text-[10px] text-teal-600 hover:underline">
+                            @{b.guest_telegram.replace('@', '')}
+                          </a>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        {b.property_title} • {new Date(b.check_in).toLocaleDateString('ru-RU')} — {new Date(b.check_out).toLocaleDateString('ru-RU')} ({b.total_days} н.)
+                      </p>
+                      <p className="text-xs font-bold text-slate-900">Сумма: {Number(b.total_price || 0).toLocaleString('ru-RU')} ₽</p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* Статус */}
+                      {b.status === 'checked_in' && <span className="bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-xl text-[10px]">🔑 Гость заселился</span>}
+                      {b.status === 'completed' && <span className="bg-blue-100 text-blue-800 font-bold px-2.5 py-1 rounded-xl text-[10px]">✅ Выселился</span>}
+                      {b.status === 'no_show' && <span className="bg-rose-100 text-rose-800 font-bold px-2.5 py-1 rounded-xl text-[10px]">❌ Не приехал</span>}
+                      {b.status === 'cancelled' && <span className="bg-rose-100 text-rose-800 font-bold px-2.5 py-1 rounded-xl text-[10px]">Отменено гостем ❌</span>}
+                      {(!b.status || b.status === 'confirmed' || b.status === 'new') && (
+                        <span className="bg-amber-100 text-amber-800 font-bold px-2.5 py-1 rounded-xl text-[10px]">⏳ Ожидает заселения</span>
+                      )}
+
+                      {/* Быстрые действия */}
+                      {(!b.status || b.status === 'confirmed' || b.status === 'new') && (
+                        <div className="flex gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateBookingStatus(b.id, 'checked_in')}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+                          >
+                            Заселился 🔑
+                          </button>
+                          {isNoShowAvailable(b.check_in) ? (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateBookingStatus(b.id, 'no_show')}
+                              className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+                            >
+                              Не приехал ❌
+                            </button>
+                          ) : (
+                            <span className="text-[9px] text-slate-400 font-medium bg-slate-100 px-2 py-1 rounded-lg">
+                              «Не приехал» после 20:00
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {b.status === 'checked_in' && (
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateBookingStatus(b.id, 'completed')}
+                          className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+                        >
+                          Выселился ✅
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* 4. МОИ ОБЪЯВЛЕНИЯ */}
@@ -1067,84 +1202,192 @@ export default function DashboardPage() {
       {isBlockModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 relative shadow-2xl space-y-4">
-            <button onClick={() => setIsBlockModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+            <button onClick={() => { setIsBlockModalOpen(false); setBlockError(''); setPriceError(''); }} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
               <X className="w-5 h-5" />
             </button>
 
-            <div className="flex items-center space-x-2">
-              <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
-                <Lock className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">Закрыть даты</h3>
-                <p className="text-xs text-slate-500">Заблокирует возможность бронирования на сайте</p>
-              </div>
+            {/* Вкладки: Закрыть даты / Цены на даты */}
+            <div className="flex border-b border-slate-100">
+              <button
+                type="button"
+                onClick={() => setActiveBlockTab('block')}
+                className={`flex-1 pb-3 text-xs font-bold text-center border-b-2 transition-all cursor-pointer ${
+                  activeBlockTab === 'block'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-slate-400 hover:text-slate-600'
+                }`}
+              >
+                🔒 Закрыть даты
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveBlockTab('price')}
+                className={`flex-1 pb-3 text-xs font-bold text-center border-b-2 transition-all cursor-pointer ${
+                  activeBlockTab === 'price'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-slate-400 hover:text-slate-600'
+                }`}
+              >
+                💰 Цены на сезон
+              </button>
             </div>
 
-            {blockError && (
-              <div className="p-3 bg-red-50 text-red-600 text-xs rounded-xl">{blockError}</div>
+            {activeBlockTab === 'block' ? (
+              <>
+                <div className="flex items-center space-x-2">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">Закрыть даты для бронирований</h3>
+                    <p className="text-[11px] text-slate-500">Заблокирует возможность бронирования на сайте на эти даты</p>
+                  </div>
+                </div>
+
+                {blockError && (
+                  <div className="p-3 bg-red-50 text-red-600 text-xs rounded-xl">{blockError}</div>
+                )}
+
+                <form onSubmit={handleSaveBlock} className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Объект</label>
+                    <select
+                      value={blockForm.property_id}
+                      onChange={(e) => setBlockForm({ ...blockForm, property_id: e.target.value })}
+                      className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 font-semibold text-slate-800"
+                    >
+                      {properties.map((p) => (
+                        <option key={p.id} value={p.id}>{p.title}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase mb-1">С даты</label>
+                      <input
+                        type="date"
+                        required
+                        value={blockForm.check_in}
+                        onChange={(e) => setBlockForm({ ...blockForm, check_in: e.target.value })}
+                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase mb-1">По дату</label>
+                      <input
+                        type="date"
+                        required
+                        value={blockForm.check_out}
+                        onChange={(e) => setBlockForm({ ...blockForm, check_out: e.target.value })}
+                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Источник / Заметка</label>
+                    <select
+                      value={blockForm.source_note}
+                      onChange={(e) => setBlockForm({ ...blockForm, source_note: e.target.value })}
+                      className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 font-semibold"
+                    >
+                      <option value="Авито">Бронь с Авито</option>
+                      <option value="Суточно.ру">Бронь с Суточно.ру</option>
+                      <option value="Звонок / Постоянные клиенты">Звонок / Постоянный клиент</option>
+                      <option value="Личный приезд / Семья">Личный приезд / Семья</option>
+                      <option value="Ремонт / Уборка">Ремонт / Генеральная уборка</option>
+                    </select>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={savingBlock}
+                    className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs py-3.5 rounded-xl transition-colors mt-2 cursor-pointer"
+                  >
+                    {savingBlock ? 'Сохранение...' : 'Заблокировать даты'}
+                  </button>
+                </form>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center space-x-2">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">Управление ценами на даты</h3>
+                    <p className="text-[11px] text-slate-500">Укажите повышенную цену в пик сезона или праздничные дни</p>
+                  </div>
+                </div>
+
+                {priceError && (
+                  <div className="p-3 bg-red-50 text-red-600 text-xs rounded-xl">{priceError}</div>
+                )}
+
+                <form onSubmit={(e) => handleSavePrice(e, false)} className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Объект</label>
+                    <select
+                      value={blockForm.property_id}
+                      onChange={(e) => setBlockForm({ ...blockForm, property_id: e.target.value })}
+                      className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 font-semibold text-slate-800"
+                    >
+                      {properties.map((p) => (
+                        <option key={p.id} value={p.id}>{p.title}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase mb-1">С даты</label>
+                      <input
+                        type="date"
+                        required
+                        value={blockForm.check_in}
+                        onChange={(e) => setBlockForm({ ...blockForm, check_in: e.target.value })}
+                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase mb-1">По дату</label>
+                      <input
+                        type="date"
+                        required
+                        value={blockForm.check_out}
+                        onChange={(e) => setBlockForm({ ...blockForm, check_out: e.target.value })}
+                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Сезонная цена за сутки (₽)</label>
+                    <input
+                      type="number"
+                      required
+                      placeholder="Например: 8000"
+                      value={seasonalPriceInput}
+                      onChange={(e) => setSeasonalPriceInput(e.target.value)}
+                      className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-3 font-bold text-blue-600 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      type="button"
+                      disabled={savingPrice}
+                      onClick={(e) => handleSavePrice(e, true)}
+                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-3.5 rounded-xl transition-colors cursor-pointer"
+                    >
+                      Сбросить цену
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={savingPrice || !seasonalPriceInput}
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-3.5 rounded-xl transition-colors cursor-pointer"
+                    >
+                      {savingPrice ? 'Сохранение...' : 'Установить цену'}
+                    </button>
+                  </div>
+                </form>
+              </>
             )}
-
-            <form onSubmit={handleSaveBlock} className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Объект</label>
-                <select
-                  value={blockForm.property_id}
-                  onChange={(e) => setBlockForm({ ...blockForm, property_id: e.target.value })}
-                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 font-semibold text-slate-800"
-                >
-                  {properties.map((p) => (
-                    <option key={p.id} value={p.id}>{p.title}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">С даты</label>
-                  <input
-                    type="date"
-                    required
-                    value={blockForm.check_in}
-                    onChange={(e) => setBlockForm({ ...blockForm, check_in: e.target.value })}
-                    className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">По дату</label>
-                  <input
-                    type="date"
-                    required
-                    value={blockForm.check_out}
-                    onChange={(e) => setBlockForm({ ...blockForm, check_out: e.target.value })}
-                    className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 font-bold"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Источник</label>
-                <select
-                  value={blockForm.source_note}
-                  onChange={(e) => setBlockForm({ ...blockForm, source_note: e.target.value })}
-                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 font-semibold"
-                >
-                  <option value="Авито">Бронь с Авито</option>
-                  <option value="Суточно.ру">Бронь с Суточно.ру</option>
-                  <option value="Звонок / Постоянные клиенты">Звонок / Постоянный клиент</option>
-                  <option value="Личный приезд / Семья">Личный приезд / Семья</option>
-                  <option value="Ремонт / Уборка">Ремонт / Генеральная уборка</option>
-                </select>
-              </div>
-
-              <button
-                type="submit"
-                disabled={savingBlock}
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs py-3.5 rounded-xl transition-colors mt-2 cursor-pointer"
-              >
-                {savingBlock ? 'Сохранение...' : 'Заблокировать даты'}
-              </button>
-            </form>
           </div>
         </div>
       )}
@@ -1311,7 +1554,7 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-1">До моря (метров)</label>
                   <input
@@ -1332,6 +1575,21 @@ export default function DashboardPage() {
                     onChange={(e) => setEditFormData({ ...editFormData, max_guests: Number(e.target.value) })}
                     className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Минимум суток</label>
+                  <select
+                    value={editFormData.min_nights || 1}
+                    onChange={(e) => setEditFormData({ ...editFormData, min_nights: Number(e.target.value) })}
+                    className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5"
+                  >
+                    <option value="1">1 сутки</option>
+                    <option value="2">2 суток</option>
+                    <option value="3">3 суток</option>
+                    <option value="5">5 суток</option>
+                    <option value="7">7 суток</option>
+                  </select>
                 </div>
               </div>
 

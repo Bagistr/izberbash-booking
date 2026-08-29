@@ -22,5 +22,6 @@ export interface Property {
   units?: PropertyUnit[];
   rating?: number;
   reviews_count?: number;
+  min_nights?: number;
   created_at?: string;
 }
